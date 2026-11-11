@@ -1,0 +1,5 @@
+content/target/
+native/api/target/
+native/api/Cargo.lock
+*.hmod
+*.hnmod

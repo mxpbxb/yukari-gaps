@@ -1,0 +1,38 @@
+{
+  "template": "minecraft:glass",
+  "properties": {
+    "hardness": 5.0,
+    "explosion_resistance": 2000.0,
+    "requires_tool": true,
+    "sounds": "minecraft:amethyst_block",
+    "light": 7
+  },
+  "state_properties": {
+    "half": {
+      "type": "enum",
+      "values": [
+        "lower",
+        "upper"
+      ]
+    }
+  },
+  "default_state": {
+    "half": "lower"
+  },
+  "shapes": {
+    "default": [
+      [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    ]
+  },
+  "collision_shapes": {
+    "default": []
+  },
+  "item": true
+}

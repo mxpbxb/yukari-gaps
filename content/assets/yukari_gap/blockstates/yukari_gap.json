@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "half=lower": {
+      "model": "yukari_gap:block/yukari_gap"
+    },
+    "half=upper": {
+      "model": "yukari_gap:block/yukari_gap"
+    }
+  }
+}

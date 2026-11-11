@@ -1,0 +1,11 @@
+# Yukari Gaps Beta for Horizon, built by its launcher: `horizon-launcher native-build`.
+# Gaps to travel between. MIT licensed. The blocks and art are the content mod `yukari_gap`.
+[mod]
+id = "yukari_gap_native"
+version = "0.4.0"
+
+[compatibility]
+horizon_revision = "1fe4e6fe0252c44efd41d882daee0468389f7d5f"
+
+[api]
+path = "api"

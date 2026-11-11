@@ -1,0 +1,8 @@
+id = "yukari_gap"
+name = "Yukari Gaps Beta (assets)"
+version = "0.4.0"
+description = "The blocks, item, art and recipe of Yukari Gaps Beta: gaps to travel between. Needs Yukari Gaps Beta (yukari_gap_native)."
+authors = ["mxpbxb"]
+api = "0.2"
+side = "both"
+capabilities = ["registries"]
