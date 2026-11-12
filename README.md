@@ -31,14 +31,15 @@ Install both from the launcher's Mods page, then press Build:
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
 - **Travel is free**, however far, and to any dimension.
 - **Sneak and right-click** your own gap to rename it or change its lock.
-- In the world the gap is an eye-gap picture that leans 45 degrees and always turns to face you.
-  You can walk into it.
+- In the world the gap is an eye-gap picture, with long trailing ends, that leans 45 degrees and always turns to face you.
+  You can walk into it. Click or break it up at the picture, in the block above the one you placed
+  it on.
 
 The world keeps its gaps in `<world>/yukari_gap/gaps.tsv`.
 
 ## Building
 
-`gen_yukari_gap.py art/eyegap.bbmodel art/shard.png content` writes the content mod from the art.
+`gen_yukari_gap.py art/gap.png art/shard.png content` writes the content mod from the art.
 `cargo horizon-mod build` in `content/` makes the `.hmod`; the native mod's source is `native/`, built
 by the Horizon launcher (`native-build`).
 

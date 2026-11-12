@@ -1,15 +1,14 @@
 """Builds the Yukari Gap content mod: one block, the gap, which the native mod draws facing the player.
 
-usage: gen_yukari_gap.py <eyegap.bbmodel> <shard icon png> <content mod folder>
+usage: gen_yukari_gap.py <gap picture png> <shard icon png> <content mod folder>
 """
-import base64
 import json
 import shutil
 import sys
 from pathlib import Path
 
-bbmodel, icon, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-NS, GAP, VERSION = "yukari_gap", "yukari_gap", "0.4.0"
+picture, icon, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+NS, GAP, VERSION = "yukari_gap", "yukari_gap", "0.5.0"
 if out.exists():
     shutil.rmtree(out)
 oa, od = out / "assets" / NS, out / "data" / NS
@@ -25,22 +24,22 @@ def write_bytes(path, data):
     path.write_bytes(data)
 
 
-# The picture drawn in the world: the texture inside eyegap.bbmodel.
-source = json.loads(bbmodel.read_text(encoding="utf-8"))["textures"][0]["source"]
-write_bytes(oa / "textures" / "entity" / "gap.png", base64.b64decode(source.split(",", 1)[1]))
+# The picture drawn in the world: the eye-gap with its trailing ends, 128 pixels square.
+write_bytes(oa / "textures" / "entity" / "gap.png", picture.read_bytes())
 # The item: the shard.
 write_bytes(oa / "textures" / "item" / f"{GAP}.png", icon.read_bytes())
 
 # The block: glass underneath (it hides nothing beside it), an empty model (the native mod draws
 # the gap), and nothing to bump into, so you can walk into it. It is two blocks, a lower and an
-# upper half, so the gap can be clicked up where its picture is.
+# upper half: only the upper one, up where the picture is, has an outline, so it is the one you click
+# and break; the lower one holds the gap's place and can't be aimed at.
 write(od / "horizon" / "block" / f"{GAP}.json", {
     "template": "minecraft:glass",
     "properties": {"hardness": 5.0, "explosion_resistance": 2000.0, "requires_tool": True,
                    "sounds": "minecraft:amethyst_block", "light": 7},
     "state_properties": {"half": {"type": "enum", "values": ["lower", "upper"]}},
     "default_state": {"half": "lower"},
-    "shapes": {"default": [[0, 0, 0, 1, 1, 1]]},
+    "shapes": {"properties": ["half"], "values": {"upper": [[0, 0, 0, 1, 1, 1]]}, "default": []},
     "collision_shapes": {"default": []},
     "item": True,
 })

@@ -35,9 +35,12 @@ const GAP: &str = "yukari_gap:yukari_gap";
 /// The picture of the gap, from the content mod's `textures/entity/gap.png`.
 const GAP_SPRITE: &str = "yukari_gap:entity/gap";
 /// How big the picture is, in blocks.
-const GAP_SIZE: f32 = 2.0;
-/// How far above the block the picture's bottom edge is, before it is tilted.
-const GAP_LIFT: f32 = 1.0;
+const GAP_SIZE: f32 = 3.0;
+/// How much of the picture's width the gap and its trailing ends cover: pixels 14 to 112 of 128.
+const GAP_LENGTH: f32 = 98.0 / 128.0;
+/// How far above the block the picture's bottom edge is, before it is tilted: low enough that,
+/// leaning, the gap's lower end sits on the top of the block, where the second block starts.
+const GAP_LIFT: f32 = 1.0 + GAP_SIZE * GAP_LENGTH / 2.0 * std::f32::consts::FRAC_1_SQRT_2 - GAP_SIZE / 2.0;
 /// How far the picture leans in its own plane, in degrees.
 const GAP_TILT: f32 = 45.0;
 

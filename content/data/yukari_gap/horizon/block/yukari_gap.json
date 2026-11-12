@@ -20,16 +20,22 @@
     "half": "lower"
   },
   "shapes": {
-    "default": [
-      [
-        0,
-        0,
-        0,
-        1,
-        1,
-        1
+    "properties": [
+      "half"
+    ],
+    "values": {
+      "upper": [
+        [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ]
       ]
-    ]
+    },
+    "default": []
   },
   "collision_shapes": {
     "default": []
