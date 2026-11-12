@@ -3,7 +3,7 @@
 //! A gap is one block; its block entity draws the eye gap, leaning and turned on its upright axis
 //! to face whoever looks at it. Place one and name it, and lock it if only you should use it.
 //! Right-click any gap to see every other gap you may use, and click one to go there for some
-//! experience. Sneak and right-click your own to rename it or change its lock.
+//! free. Sneak and right-click your own to rename it or change its lock.
 
 mod store;
 mod ui;
@@ -157,38 +157,6 @@ fn facing_yaw(dx: f64, dz: f64) -> f32 {
     dx.atan2(dz).to_degrees() as f32
 }
 
-// ---- Experience ----
-
-/// What a trip to `to` costs in levels: one for each full 500 blocks, at most three, and three
-/// to another dimension. Free in creative.
-fn cost(player: &NativeServerPlayer, to: &Gap) -> i32 {
-    if player.game_mode == 1 {
-        return 0;
-    }
-    if player.dimension != to.dimension {
-        return 3;
-    }
-    let d = |i: usize| player.position[i] - (f64::from(to.pos[i]) + 0.5);
-    let distance = (d(0) * d(0) + d(2) * d(2)).sqrt();
-    ((distance / 500.0) as i32).min(3)
-}
-
-/// `Player.getXpNeededForNextLevel`.
-fn xp_for_level(level: i32) -> i32 {
-    if level >= 30 {
-        112 + (level - 30) * 9
-    } else if level >= 15 {
-        37 + (level - 15) * 5
-    } else {
-        7 + level * 2
-    }
-}
-
-/// The experience points a player at `level` and `progress` has in all.
-fn total_xp(level: i32, progress: f32) -> i32 {
-    (0..level).map(xp_for_level).sum::<i32>() + (progress * xp_for_level(level) as f32) as i32
-}
-
 // ---- The server's side ----
 
 /// A right-click reaches the game once per hand: one counts only after a pause.
@@ -230,7 +198,7 @@ fn show_list(host: &mut dyn Host, player: &NativeServerPlayer, origin: &Key) {
         let list = s
             .destinations(player.uuid, Some(origin))
             .into_iter()
-            .map(|g| Entry { key: g.key(), name: g.name.clone(), cost: cost(player, g), locked: g.locked })
+            .map(|g| Entry { key: g.key(), name: g.name.clone(), locked: g.locked })
             .collect::<Vec<_>>();
         (list, false)
     })
@@ -256,11 +224,6 @@ fn travel(host: &mut dyn Host, uuid: u128, to: &Key) {
         host.action_bar(uuid, Text::literal(format!("{} is locked", gap.name)));
         return;
     }
-    let levels = cost(&player, &gap);
-    if player.xp_level < levels {
-        host.action_bar(uuid, Text::literal(format!("You need {levels} levels to go to {}", gap.name)));
-        return;
-    }
     // In front of the gap, looking away from it.
     let [dx, _, dz] = step(&gap.facing);
     let at = [f64::from(gap.pos[0] + dx) + 0.5, f64::from(gap.pos[1]), f64::from(gap.pos[2] + dz) + 0.5];
@@ -271,11 +234,6 @@ fn travel(host: &mut dyn Host, uuid: u128, to: &Key) {
     }
     if let Ok(mut opened) = OPENED_AT.lock() {
         opened.remove(&uuid);
-    }
-    if levels > 0 {
-        let level = player.xp_level - levels;
-        let progress = player.xp_progress;
-        host.set_player_status(uuid, None, None, Some((level, progress, total_xp(level, progress))));
     }
     host.play_local_sound("minecraft:entity.enderman.teleport", from, 1.0, 1.0, 0);
     host.play_local_sound("minecraft:entity.enderman.teleport", at, 1.0, 1.0, 0);
@@ -635,12 +593,5 @@ mod tests {
         assert_eq!(facing_yaw(1.0, 0.0), 90.0);
         assert_eq!(facing_yaw(0.0, -1.0), 180.0);
         assert_eq!(facing_yaw(-1.0, 0.0), -90.0);
-    }
-
-    #[test]
-    fn experience_adds_up_as_vanilla_counts_it() {
-        assert_eq!(total_xp(0, 0.0), 0);
-        assert_eq!(total_xp(1, 0.0), 7);
-        assert_eq!(total_xp(30, 0.0), 1395);
     }
 }

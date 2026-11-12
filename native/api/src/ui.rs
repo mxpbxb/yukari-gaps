@@ -250,12 +250,8 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
                 let text_x = r[0] + 24.0;
                 let name = fit(host, &e.name, r[2] - 28.0);
                 host.text(batch, &name, [text_x, r[1] + 6.0], WHITE, true);
-                let price = match e.cost {
-                    0 => "Free".to_owned(),
-                    1 => "1 level".to_owned(),
-                    n => format!("{n} levels"),
-                };
-                let line = if e.locked { format!("{price} - Locked") } else { price };
+                let place = dimension_label(&e.key.0);
+                let line = if e.locked { format!("{place} - Locked") } else { place.to_owned() };
                 host.text(batch, &fit(host, &line, r[2] - 28.0), [text_x, r[1] + 19.0], if e.locked { GOLD } else { GREY }, false);
             }
             if let (Some(track), Some(thumb)) = (l.track, l.thumb(*first_row)) {

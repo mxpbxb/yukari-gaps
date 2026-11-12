@@ -29,8 +29,7 @@ Install both from the launcher's Mods page, then press Build:
 - **Lock** it in the same window and only you can use it, or break it. Unlocked, it is everyone's.
 - **Right-click** any gap for every other gap you may use: tiles in rows, a new row when one is full,
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
-- **The cost** is a level for each full 500 blocks, at most three, and three to another dimension.
-  Free in creative.
+- **Travel is free**, however far, and to any dimension.
 - **Sneak and right-click** your own gap to rename it or change its lock.
 - In the world the gap is an eye-gap picture that leans 45 degrees and always turns to face you.
   You can walk into it.

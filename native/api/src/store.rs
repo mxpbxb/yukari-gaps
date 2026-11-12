@@ -162,13 +162,12 @@ pub fn decode_naming(data: &[u8]) -> Option<Naming> {
     Some(Naming { key: parse_key(&f)?, locked: *f.get(4)? == "1", name: f.get(5..)?.join(" ") })
 }
 
-/// One gap in the travel screen: where, its name, what going costs, and whether it is locked
+/// One gap in the travel screen: where, its name, and whether it is locked
 /// (only its owner, the player, sees it then).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
     pub key: Key,
     pub name: String,
-    pub cost: i32,
     pub locked: bool,
 }
 
@@ -178,7 +177,7 @@ pub const LIST_MAX: usize = 400;
 pub fn encode_list(entries: &[Entry]) -> Vec<u8> {
     let mut out = String::new();
     for e in entries.iter().take(LIST_MAX) {
-        out += &format!("{}\t{}\t{}\t{}\n", key_fields(&e.key), e.cost, u8::from(e.locked), clean(&e.name));
+        out += &format!("{}\t{}\t{}\n", key_fields(&e.key), u8::from(e.locked), clean(&e.name));
     }
     out.into_bytes()
 }
@@ -190,9 +189,8 @@ pub fn decode_list(data: &[u8]) -> Vec<Entry> {
             let f: Vec<&str> = line.split('\t').collect();
             Some(Entry {
                 key: parse_key(&f)?,
-                cost: f.get(4)?.parse().ok()?,
-                locked: *f.get(5)? == "1",
-                name: f.get(6..)?.join(" "),
+                locked: *f.get(4)? == "1",
+                name: f.get(5..)?.join(" "),
             })
         })
         .collect()
@@ -268,7 +266,7 @@ mod tests {
         let key: Key = ("minecraft:the_nether".into(), [-3, 70, 12]);
         let n = Naming { key: key.clone(), name: "My gap".into(), locked: true };
         assert_eq!(decode_naming(&encode_naming(&n)), Some(n));
-        let list = vec![Entry { key: key.clone(), name: "A b".into(), cost: 2, locked: false }];
+        let list = vec![Entry { key: key.clone(), name: "A b".into(), locked: false }];
         assert_eq!(decode_list(&encode_list(&list)), list);
         assert_eq!(decode_go(&encode_go(&key)), Some(key));
     }
