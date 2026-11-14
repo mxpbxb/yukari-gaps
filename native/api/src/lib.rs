@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use horizon_client::mod_api::{
     BlockEntityEvent, BlockEntityRenderBoundingBoxEvent, BlockEntitySubmitEvent, ClientTickPostEvent,
-    Compound, DestroyBlockEvent, Flow, Hooks, Host, NativeServerPlayer, NetFromClientEvent,
+    Compound, DestroyBlockEvent, Flow, Hooks, Host, ItemStack, NativeServerPlayer, NetFromClientEvent,
     NetFromServerEvent, PlaceBlockEvent, RightClickBlockEvent, ScreenCharTypedPreEvent,
     ScreenKeyPressedPreEvent, ScreenMouseButtonPressedPreEvent, ScreenMouseButtonReleasedPreEvent,
     ScreenMouseDraggedPreEvent, ScreenMouseScrolledPreEvent, ScreenRenderPostEvent, Text,
@@ -346,26 +346,30 @@ impl Hooks for Mod {
                 host.action_bar(player.uuid, Text::literal(format!("{name} is locked: only its owner can break it")));
                 Flow::Cancel
             }
-            Some(Ok(gone)) => {
-                // The other half goes too; only the lower one drops the gap, unless in creative.
+            gone => {
+                // Both halves are broken here, as if with a pickaxe, so the gap drops whatever it
+                // was mined with (the block asks for a pickaxe, and the assets mod stays as servers
+                // know it). Only the lower half drops the gap; in creative nothing drops.
+                let gone = gone.and_then(Result::ok).flatten();
                 let other = if upper { lower } else { above(event.pos) };
-                if host.block(other) == GAP {
-                    let creative = player.game_mode == 1;
-                    let tool = host.held_stack(player.uuid);
-                    if let Ok(mut b) = BREAKING.lock() {
-                        *b = true;
+                let creative = player.game_mode == 1;
+                let pickaxe = ItemStack::new("minecraft:iron_pickaxe", 1);
+                if let Ok(mut b) = BREAKING.lock() {
+                    *b = true;
+                }
+                for pos in [other, event.pos] {
+                    if host.block(pos) == GAP {
+                        host.destroy_block(pos, Some(&pickaxe), creative);
                     }
-                    host.destroy_block(other, tool.as_ref(), creative);
-                    if let Ok(mut b) = BREAKING.lock() {
-                        *b = false;
-                    }
+                }
+                if let Ok(mut b) = BREAKING.lock() {
+                    *b = false;
                 }
                 if let Some(name) = gone {
                     host.action_bar(player.uuid, Text::literal(format!("Gap closed: {name}")));
                 }
-                Flow::Continue
+                Flow::Cancel
             }
-            None => Flow::Continue,
         }
     }
 

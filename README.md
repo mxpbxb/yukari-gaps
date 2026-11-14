@@ -26,6 +26,7 @@ Install both from the launcher's Mods page, then press Build:
 - **Place** it where there are two free blocks. A window asks for its name: type one and press Enter
   or Done. Left empty, it keeps a made-up name. If another gap has the name already, yours gets a
   number: `Home (2)`, `Home (3)`.
+- **Mine** it with anything, a pickaxe, another tool or your hand, and it drops as its item.
 - **Lock** it in the same window and only you can use it, or break it. Unlocked, it is everyone's.
 - **Right-click** any gap for every other gap you may use: tiles in rows, a new row when one is full,
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
