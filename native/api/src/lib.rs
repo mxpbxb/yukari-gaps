@@ -15,10 +15,10 @@ use std::time::{Duration, Instant};
 
 use horizon_client::mod_api::{
     BlockEntityEvent, BlockEntityRenderBoundingBoxEvent, BlockEntitySubmitEvent, ClientTickPostEvent,
-    Compound, DestroyBlockEvent, Flow, Hooks, Host, ItemStack, NativeServerPlayer, NetFromClientEvent,
+    Compound, DestroyBlockEvent, Flow, Hooks, Host, NativeServerPlayer, NetFromClientEvent,
     NetFromServerEvent, PlaceBlockEvent, RightClickBlockEvent, ScreenCharTypedPreEvent,
     ScreenKeyPressedPreEvent, ScreenMouseButtonPressedPreEvent, ScreenMouseButtonReleasedPreEvent,
-    ScreenMouseDraggedPreEvent, ScreenMouseScrolledPreEvent, ScreenRenderPostEvent, Text,
+    ScreenMouseDraggedPreEvent, ScreenMouseScrolledPreEvent, ScreenRenderPostEvent, Tag, Text,
 };
 
 use store::{Entry, Gap, Key, Naming, Store, clean};
@@ -347,28 +347,37 @@ impl Hooks for Mod {
                 Flow::Cancel
             }
             gone => {
-                // Both halves are broken here, as if with a pickaxe, so the gap drops whatever it
-                // was mined with (the block asks for a pickaxe, and the assets mod stays as servers
-                // know it). Only the lower half drops the gap; in creative nothing drops.
+                // The gap drops itself, whatever it was mined with: the block asks for a pickaxe,
+                // and its loot is only rolled for the right tool, so the item is made here and the
+                // halves broken with what they'd drop collected, not popped (the assets mod stays
+                // as servers know it). In creative nothing drops, as with any block.
                 let gone = gone.and_then(Result::ok).flatten();
-                let other = if upper { lower } else { above(event.pos) };
                 let creative = player.game_mode == 1;
-                let pickaxe = ItemStack::new("minecraft:iron_pickaxe", 1);
+                // The player breaks the upper half, which drops nothing of its own; the lower one,
+                // which the loot table drops the gap for, is broken here. Should the lower half
+                // itself be the one mined, both are broken here.
+                let here: Vec<[i32; 3]> = if upper { vec![lower] } else { vec![above(event.pos), event.pos] };
                 if let Ok(mut b) = BREAKING.lock() {
                     *b = true;
                 }
-                for pos in [other, event.pos] {
+                for pos in here {
                     if host.block(pos) == GAP {
-                        host.destroy_block(pos, Some(&pickaxe), creative);
+                        let _ = host.destroy_block(pos, None, true);
                     }
                 }
                 if let Ok(mut b) = BREAKING.lock() {
                     *b = false;
                 }
+                if !creative {
+                    let at = [f64::from(lower[0]) + 0.5, f64::from(lower[1]) + 0.5, f64::from(lower[2]) + 0.5];
+                    let stack: Compound = [("id".into(), Tag::String(GAP.into())), ("count".into(), Tag::Int(1))].into();
+                    let nbt: Compound = [("Item".into(), Tag::Compound(stack)), ("PickupDelay".into(), Tag::Short(10))].into();
+                    host.summon(&player.dimension, "minecraft:item", at, nbt);
+                }
                 if let Some(name) = gone {
                     host.action_bar(player.uuid, Text::literal(format!("Gap closed: {name}")));
                 }
-                Flow::Cancel
+                if upper { Flow::Continue } else { Flow::Cancel }
             }
         }
     }
