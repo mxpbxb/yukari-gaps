@@ -2,8 +2,10 @@
 //!
 //! A gap is one block; its block entity draws the eye gap, leaning and turned on its upright axis
 //! to face whoever looks at it. Place one and name it, and lock it if only you should use it.
-//! Right-click any gap to see every other gap you may use, and click one to go there for some
-//! free. Sneak and right-click your own to rename it or change its lock.
+//! Right-click any gap to see every other gap you may use, and click one to go there for free.
+//! Others have to find a gap (right-click it once) before they can travel to it, unless its owner
+//! made it global with a Yukari umbrella. A locked gap is only its owner's, and of the players
+//! they share it with. Sneak and right-click your own to rename it, lock it or share it.
 
 mod store;
 mod ui;
@@ -15,13 +17,13 @@ use std::time::{Duration, Instant};
 
 use horizon_client::mod_api::{
     BlockEntityEvent, BlockEntityRenderBoundingBoxEvent, BlockEntitySubmitEvent, ClientTickPostEvent,
-    Compound, DestroyBlockEvent, Flow, Hooks, Host, NativeServerPlayer, NetFromClientEvent,
+    Compound, DestroyBlockEvent, Flow, Hooks, Host, LivingDeathEvent, NativeServerPlayer, NetFromClientEvent,
     NetFromServerEvent, PlaceBlockEvent, RightClickBlockEvent, ScreenCharTypedPreEvent,
     ScreenKeyPressedPreEvent, ScreenMouseButtonPressedPreEvent, ScreenMouseButtonReleasedPreEvent,
     ScreenMouseDraggedPreEvent, ScreenMouseScrolledPreEvent, ScreenRenderPostEvent, Tag, Text,
 };
 
-use store::{Entry, Gap, Key, Naming, Store, clean};
+use store::{Entry, Gap, Key, Naming, Player, Store, clean};
 use ui::{MOD_ID, UI, Ui};
 
 pub fn hooks() -> Box<dyn Hooks> {
@@ -32,6 +34,31 @@ struct Mod;
 
 /// The gap: its block, item and block entity type all have this id.
 const GAP: &str = "yukari_gap:yukari_gap";
+/// The Yukari umbrella: its owner right-clicks a gap with it to make it global, or not, which
+/// uses the umbrella up. It can't
+/// be crafted: only Yukari drops it.
+const UMBRELLA: &str = "yukari_gap:yukari_umbrella";
+/// The Yukaris who drop the umbrella when they die: Touhou Mobs' own, which brings Yukari
+/// through a gap after a traveller once in 2,000 (0.05%) itself (`thmobs_native`,
+/// `YUKARI_FROM_GAP`), so this mod doesn't roll for her too.
+const YUKARIS: [&str; 2] = ["thmobs:yukari", "thmobs:classic_yukari"];
+/// The chance, in percent, that a Yukari drops the umbrella.
+const UMBRELLA_CHANCE: u32 = 80;
+
+/// Whether a roll of 0 to 99 comes under `percent`.
+fn roll(percent: u32) -> bool {
+    static STATE: Mutex<u64> = Mutex::new(0);
+    let Ok(mut s) = STATE.lock() else { return false };
+    if *s == 0 {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);
+        *s = now | 1;
+    }
+    // xorshift64*
+    *s ^= *s >> 12;
+    *s ^= *s << 25;
+    *s ^= *s >> 27;
+    (s.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 32) % 100 < u64::from(percent)
+}
 /// The picture of the gap, from the content mod's `textures/entity/gap.png`.
 const GAP_SPRITE: &str = "yukari_gap:entity/gap";
 /// How big the picture is, in blocks.
@@ -189,10 +216,81 @@ fn near(player: &NativeServerPlayer, key: &Key) -> bool {
     player.dimension == *dimension && d(0) * d(0) + d(1) * d(1) + d(2) * d(2) <= REACH * REACH
 }
 
+/// Who the owner of `gap` can share it with: everyone online but them, then those it is shared
+/// with who are offline, by name.
+fn share_list(host: &dyn Host, gap: &Gap, owner: u128) -> Vec<Player> {
+    let mut players: Vec<Player> = host
+        .server_players()
+        .into_iter()
+        .filter(|p| p.uuid != owner)
+        .map(|p| Player { uuid: p.uuid, shared: gap.is_shared_with(p.uuid), online: true, name: p.name })
+        .collect();
+    players.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    for (uuid, name) in &gap.shared {
+        if !players.iter().any(|p| p.uuid == *uuid) {
+            players.push(Player { uuid: *uuid, name: name.clone(), shared: true, online: false });
+        }
+    }
+    players
+}
+
 /// Asks the owner of the gap at `key` to name it: the client opens the naming screen.
 fn ask_name(host: &mut dyn Host, player: u128, gap: &Gap) {
-    let naming = Naming { key: gap.key(), name: gap.name.clone(), locked: gap.locked };
+    let players = share_list(host, gap, player);
+    let naming = Naming { key: gap.key(), name: gap.name.clone(), locked: gap.locked, global: gap.global, players };
     let _ = host.net_send_to_player(player, store::NAME, &store::encode_naming(&naming));
+}
+
+/// The owner shares their gap with a player, or stops: only while it is locked does it matter,
+/// but the list is kept either way.
+fn share(host: &mut dyn Host, uuid: u128, s: store::Share) {
+    let Some(player) = player_named(host, uuid) else { return };
+    if !near(&player, &s.key) {
+        return;
+    }
+    // A name from the server's own list, when they are online.
+    let name = player_named(host, s.player).map_or(s.name.clone(), |p| p.name);
+    let result = with_store(host, |st| match st.find_mut(&s.key) {
+        None => (Err("That gap is gone".to_owned()), false),
+        Some(g) if g.owner != uuid => (Err("Only its owner can share this gap".to_owned()), false),
+        Some(g) => {
+            let changed = g.share(s.player, &name, s.on);
+            (Ok(g.name.clone()), changed)
+        }
+    });
+    match result {
+        Some(Ok(gap)) if s.on => {
+            host.action_bar(uuid, Text::literal(format!("{name} can use {gap}")));
+            host.action_bar(s.player, Text::literal(format!("{} shared the gap {gap} with you", player.name)));
+        }
+        Some(Ok(gap)) => {
+            host.action_bar(uuid, Text::literal(format!("{name} can no longer use {gap}")));
+        }
+        Some(Err(why)) => {
+            host.action_bar(uuid, Text::literal(why));
+        }
+        None => {}
+    }
+}
+
+/// Its owner right-clicked the gap with a Yukari umbrella: it turns global, or back.
+fn toggle_global(host: &mut dyn Host, uuid: u128, key: &Key) {
+    let result = with_store(host, |s| match s.find_mut(key) {
+        Some(g) if g.owner == uuid || g.owner == 0 => {
+            g.owner = uuid;
+            g.global = !g.global;
+            (Some((g.name.clone(), g.global, g.locked)), true)
+        }
+        _ => (None, false),
+    })
+    .flatten();
+    let text = match result {
+        Some((name, true, true)) => format!("{name} is global, but locked: unlock it to open it to everyone"),
+        Some((name, true, false)) => format!("{name} is global: everyone can use it"),
+        Some((name, false, _)) => format!("{name} is no longer global: players have to find it"),
+        None => "Only its owner can make this gap global".to_owned(),
+    };
+    host.action_bar(uuid, Text::literal(text));
 }
 
 /// Sends `player` the travel screen for the gap at `origin`.
@@ -201,7 +299,7 @@ fn show_list(host: &mut dyn Host, player: &NativeServerPlayer, origin: &Key) {
         let list = s
             .destinations(player.uuid, Some(origin))
             .into_iter()
-            .map(|g| Entry { key: g.key(), name: g.name.clone(), locked: g.locked })
+            .map(|g| Entry { key: g.key(), name: g.name.clone(), locked: g.locked, global: g.global })
             .collect::<Vec<_>>();
         (list, false)
     })
@@ -224,7 +322,8 @@ fn travel(host: &mut dyn Host, uuid: u128, to: &Key) {
         return;
     };
     if !gap.usable_by(uuid) {
-        host.action_bar(uuid, Text::literal(format!("{} is locked", gap.name)));
+        let why = if gap.locked { "is locked" } else { "hasn't been found by you yet" };
+        host.action_bar(uuid, Text::literal(format!("{} {why}", gap.name)));
         return;
     }
     // In front of the gap, looking away from it.
@@ -309,7 +408,17 @@ impl Hooks for Mod {
                 Some(name) => s.unique_name(name, None),
                 None => new_name(event.pos, s),
             };
-            let gap = Gap { dimension: key.0.clone(), pos: key.1, facing, name, owner: player.uuid, locked: false };
+            let gap = Gap {
+                dimension: key.0.clone(),
+                pos: key.1,
+                facing,
+                name,
+                owner: player.uuid,
+                locked: false,
+                global: false,
+                known: Vec::new(),
+                shared: Vec::new(),
+            };
             s.gaps.push(gap.clone());
             (gap, true)
         });
@@ -333,7 +442,7 @@ impl Hooks for Mod {
         let lower = if upper { below(event.pos) } else { event.pos };
         let key = (player.dimension.clone(), lower);
         let gone = with_store(host, |s| match s.find(&key) {
-            Some(g) if !g.usable_by(player.uuid) => (Err(g.name.clone()), false),
+            Some(g) if !g.breakable_by(player.uuid) => (Err(g.name.clone()), false),
             Some(g) => {
                 let name = g.name.clone();
                 s.gaps.retain(|g| g.key() != key);
@@ -382,7 +491,8 @@ impl Hooks for Mod {
         }
     }
 
-    /// Right-click a gap to choose where to go. Its owner, sneaking, renames it or changes its lock.
+    /// Right-click a gap to find it and choose where to go. Its owner, sneaking, renames it,
+    /// locks it or shares it; with a Yukari umbrella, makes it global or not.
     fn right_click_block(&self, host: &mut dyn Host, event: &mut RightClickBlockEvent) -> Flow {
         if host.block(event.pos) != GAP {
             return Flow::Continue;
@@ -393,29 +503,67 @@ impl Hooks for Mod {
         }
         let key = (player.dimension.clone(), lower_half(host, event.pos));
         let facing = facing_towards(player.yaw).to_owned();
-        let gap = with_store(host, |s| {
+        let umbrella = host.held().is_some_and(|(item, _, _)| item == UMBRELLA);
+        let found = with_store(host, |s| {
             // A gap set with a command is taken in as it is found, as its finder's.
             if s.find(&key).is_none() {
                 let name = new_name(key.1, s);
-                let gap = Gap { dimension: key.0.clone(), pos: key.1, facing, name, owner: player.uuid, locked: false };
+                let gap = Gap {
+                    dimension: key.0.clone(),
+                    pos: key.1,
+                    facing,
+                    name,
+                    owner: player.uuid,
+                    locked: false,
+                    global: false,
+                    known: Vec::new(),
+                    shared: Vec::new(),
+                };
                 s.gaps.push(gap);
-                return (s.find(&key).cloned(), true);
+                return (s.find(&key).cloned().map(|g| (g, false)), true);
             }
-            (s.find(&key).cloned(), false)
+            // Touching it is finding it.
+            let new = s.find_mut(&key).is_some_and(|g| g.discover(player.uuid));
+            (s.find(&key).cloned().map(|g| (g, new)), new)
         })
         .flatten();
-        let Some(gap) = gap else { return Flow::Cancel };
+        let Some((gap, newly_found)) = found else { return Flow::Cancel };
         let owner = gap.owner == player.uuid || gap.owner == 0;
-        if player.sneaking && owner {
+        if umbrella && owner {
+            toggle_global(host, player.uuid, &key);
+            // An umbrella is used up by it (not in creative).
+            if player.game_mode != 1 {
+                host.take_items(UMBRELLA, 1);
+            }
+        } else if player.sneaking && owner {
             ask_name(host, player.uuid, &gap);
-        } else if !gap.usable_by(player.uuid) {
+        } else if gap.locked && !gap.usable_by(player.uuid) {
             host.action_bar(player.uuid, Text::literal(format!("{} is locked by its owner", gap.name)));
         } else {
+            if newly_found {
+                host.action_bar(player.uuid, Text::literal(format!("Found a gap: {}", gap.name)));
+            }
             let at = [f64::from(key.1[0]) + 0.5, f64::from(key.1[1]) + 1.0, f64::from(key.1[2]) + 0.5];
             host.play_local_sound("minecraft:block.amethyst_block.resonate", at, 1.0, 1.0, 0);
             show_list(host, &player, &key);
         }
         Flow::Cancel
+    }
+
+    /// A Yukari dying drops the umbrella, 80 times in 100 (not when removed by a command or the void).
+    fn living_death(&self, host: &mut dyn Host, event: &mut LivingDeathEvent<'_>) -> Flow {
+        if YUKARIS.contains(&event.kind)
+            && !matches!(event.damage_type, "minecraft:out_of_world" | "minecraft:generic_kill")
+            && roll(UMBRELLA_CHANCE)
+            && let Some(e) = host.entity(event.entity)
+            && let (Some(at), Some(level)) = (host.entity_position(e), host.entity_level(e))
+        {
+            let dimension = level.dimension().to_owned();
+            let item: Compound = [("id".into(), Tag::String(UMBRELLA.into())), ("count".into(), Tag::Int(1))].into();
+            let nbt: Compound = [("Item".into(), Tag::Compound(item)), ("PickupDelay".into(), Tag::Short(10))].into();
+            host.summon(&dimension, "minecraft:item", [at[0], at[1] + 0.5, at[2]], nbt);
+        }
+        Flow::Continue
     }
 
     fn net_from_client(&self, host: &mut dyn Host, event: &mut NetFromClientEvent<'_>) {
@@ -430,6 +578,11 @@ impl Hooks for Mod {
                     travel(host, event.player, &to);
                 }
             }
+            store::SHARE => {
+                if let Some(s) = store::decode_share(event.data) {
+                    share(host, event.player, s);
+                }
+            }
             _ => {}
         }
     }
@@ -438,7 +591,16 @@ impl Hooks for Mod {
     fn net_from_server(&self, host: &mut dyn Host, event: &mut NetFromServerEvent<'_>) {
         let next = match event.channel {
             store::NAME => match store::decode_naming(event.data) {
-                Some(n) => Ui::Naming { key: n.key, current: n.name, text: String::new(), locked: n.locked },
+                Some(n) => Ui::Naming {
+                    key: n.key,
+                    current: n.name,
+                    text: String::new(),
+                    locked: n.locked,
+                    global: n.global,
+                    players: n.players,
+                    sharing: false,
+                    first_row: 0,
+                },
                 None => return,
             },
             store::LIST => Ui::List { entries: store::decode_list(event.data), first_row: 0, dragging: false },
@@ -582,6 +744,9 @@ mod tests {
             name: name.into(),
             owner: 1,
             locked: false,
+            global: false,
+            known: Vec::new(),
+            shared: Vec::new(),
         }
     }
 
@@ -593,6 +758,24 @@ mod tests {
             assert!(!store.gaps.iter().any(|g| g.name.eq_ignore_ascii_case(&name)), "{name}");
             store.gaps.push(gap(&name, i));
         }
+    }
+
+    #[test]
+    fn the_rolls_come_out_near_their_chances() {
+        let hits = |p| (0..20_000).filter(|_| roll(p)).count();
+        let umbrella = hits(UMBRELLA_CHANCE);
+        assert!((15_200..16_800).contains(&umbrella), "80% of 20 000 is about 16 000, got {umbrella}");
+        assert_eq!(hits(0), 0);
+        assert_eq!(hits(100), 20_000);
+    }
+
+    #[test]
+    fn yukari_comes_through_only_by_touhou_mobs_roll() {
+        // This mod summons no Yukari itself: Touhou Mobs rolls once in 2,000 on gap travel.
+        let src = include_str!("lib.rs");
+        let summons = src.matches(&format!("host.summon(&gap.dimension, {}", "YUKARI")).count();
+        assert_eq!(summons, 0);
+        assert!(!src.contains(&format!("const {}: &str = \"thmobs:yukari\"", "YUKARI")));
     }
 
     #[test]

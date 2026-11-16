@@ -27,11 +27,17 @@ Install both from the launcher's Mods page, then press Build:
   or Done. Left empty, it keeps a made-up name. If another gap has the name already, yours gets a
   number: `Home (2)`, `Home (3)`.
 - **Mine** it with anything, a pickaxe, another tool or your hand, and it drops as its item.
-- **Lock** it in the same window and only you can use it, or break it. Unlocked, it is everyone's.
-- **Right-click** any gap for every other gap you may use: tiles in rows, a new row when one is full,
+- **Lock** it in the same window and only you can use it, or break it. While it is locked you can
+  **share** it there with players: those online, and anyone it is already shared with.
+- **Find** a gap before you can travel to it: right-click it once. Your own gaps are found already.
+- **Make it global** with a **Yukari Umbrella**: right-click your own gap with one and everyone can
+  travel to it without finding it (still not while it is locked); do it again to end it. Each use
+  takes the umbrella (not in Creative). Umbrellas can't be crafted: Yukari (Touhou Mobs) drops one
+  80 times in 100 when she dies. It is drawn as Touhou Items' parasol, so install that mod to see it.
+- **Right-click** any gap for every other gap you may use (found, global, or shared with you): tiles in rows, a new row when one is full,
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
 - **Travel is free**, however far, and to any dimension.
-- **Sneak and right-click** your own gap to rename it or change its lock.
+- **Sneak and right-click** your own gap to rename it, change its lock or who it is shared with.
 - In the world the gap is an eye-gap picture, with long trailing ends, that leans 45 degrees and always turns to face you.
   You can walk into it. Click or break it up at the picture, in the block above the one you placed
   it on.

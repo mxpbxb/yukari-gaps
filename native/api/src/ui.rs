@@ -1,11 +1,12 @@
-//! The client's two screens, drawn over the world as the mod's own screen: naming a gap, and the
-//! gaps to travel to, as tiles in rows that wrap, scrolled when there are more than fit.
+//! The client's screens, drawn over the world as the mod's own screen: naming a gap (and, while
+//! it is locked, sharing it with players), and the gaps to travel to, as tiles in rows that wrap,
+//! scrolled when there are more than fit.
 
 use std::sync::Mutex;
 
 use horizon_client::mod_api::{Host, HudBatch};
 
-use crate::store::{self, Entry, Key, NAME_MAX};
+use crate::store::{self, Entry, Key, NAME_MAX, Player};
 
 pub const MOD_ID: &str = "yukari_gap_native";
 const GAP_ITEM: &str = "yukari_gap:yukari_gap";
@@ -21,6 +22,14 @@ pub enum Ui {
         current: String,
         text: String,
         locked: bool,
+        /// Made global with a Yukari umbrella (shown, not changed here).
+        global: bool,
+        /// Who it can be shared with: online players, and offline ones it is shared with.
+        players: Vec<Player>,
+        /// Showing the sharing list instead of the name.
+        sharing: bool,
+        /// The sharing list's first row shown.
+        first_row: usize,
     },
     List {
         entries: Vec<Entry>,
@@ -47,6 +56,13 @@ fn send(channel: &'static str, data: Vec<u8>) {
     if let Ok(mut out) = OUTBOX.lock() {
         out.messages.push((channel, data));
         out.close = true;
+    }
+}
+
+/// Sends without closing the screen: sharing goes on.
+fn send_open(channel: &'static str, data: Vec<u8>) {
+    if let Ok(mut out) = OUTBOX.lock() {
+        out.messages.push((channel, data));
     }
 }
 
@@ -142,20 +158,60 @@ struct NamingLayout {
     panel: Rect,
     field: Rect,
     lock: Rect,
+    share: Rect,
     done: Rect,
 }
 
 impl NamingLayout {
     fn new(w: f32, h: f32) -> Self {
-        let (pw, ph) = (280.0, 120.0);
+        let (pw, ph) = (300.0, 132.0);
         let panel = [(w - pw) / 2.0, (h - ph) / 2.0, pw, ph];
         let (x, y) = (panel[0], panel[1]);
+        let bw = (pw - 24.0 - 2.0 * 8.0) / 3.0;
         Self {
             panel,
             field: [x + 12.0, y + 32.0, pw - 24.0, 20.0],
-            lock: [x + 12.0, y + 64.0, (pw - 32.0) / 2.0, 20.0],
-            done: [x + 20.0 + (pw - 32.0) / 2.0, y + 64.0, (pw - 32.0) / 2.0, 20.0],
+            lock: [x + 12.0, y + 64.0, bw, 20.0],
+            share: [x + 12.0 + bw + 8.0, y + 64.0, bw, 20.0],
+            done: [x + 12.0 + 2.0 * (bw + 8.0), y + 64.0, bw, 20.0],
         }
+    }
+}
+
+const ROW_H: f32 = 18.0;
+
+/// The sharing list's parts, for `count` players.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShareLayout {
+    pub panel: Rect,
+    /// Where the rows go.
+    pub view: Rect,
+    pub visible_rows: usize,
+    pub count: usize,
+    pub back: Rect,
+}
+
+impl ShareLayout {
+    pub fn new(w: f32, h: f32, count: usize) -> Self {
+        let pw = 300.0_f32.min(w - 16.0);
+        let ph = 260.0_f32.min(h - 16.0).max(120.0);
+        let panel = [(w - pw) / 2.0, (h - ph) / 2.0, pw, ph];
+        let view = [panel[0] + PAD, panel[1] + HEADER + 12.0, pw - 2.0 * PAD, ph - HEADER - 12.0 - 34.0];
+        let visible_rows = ((view[3] / ROW_H).floor() as usize).max(1);
+        let back = [panel[0] + (pw - 90.0) / 2.0, panel[1] + ph - 28.0, 90.0, 20.0];
+        Self { panel, view, visible_rows, count, back }
+    }
+
+    pub fn max_first_row(&self) -> usize {
+        self.count.saturating_sub(self.visible_rows)
+    }
+
+    /// Where player `index`'s row is, when it is in view.
+    pub fn row(&self, index: usize, first_row: usize) -> Option<Rect> {
+        if index < first_row || index >= first_row + self.visible_rows || index >= self.count {
+            return None;
+        }
+        Some([self.view[0], self.view[1] + (index - first_row) as f32 * ROW_H, self.view[2], ROW_H - 2.0])
     }
 }
 
@@ -208,7 +264,32 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
     let (w, h) = (window[2], window[3]);
     match &*ui {
         Ui::Closed => {}
-        Ui::Naming { text, locked, current, .. } => {
+        Ui::Naming { players, sharing: true, first_row, current, .. } => {
+            host.fill(batch, window, 0x90_00_00_00);
+            let l = ShareLayout::new(w, h, players.len());
+            frame(host, batch, l.panel, PANEL, EDGE);
+            let title = fit(host, &format!("Share {current}"), l.panel[2] - 2.0 * PAD);
+            host.text(batch, &title, [l.panel[0] + PAD, l.panel[1] + 8.0], PURPLE, true);
+            host.text(batch, "Click a player to let them use it, again to revoke", [l.panel[0] + PAD, l.panel[1] + 22.0], GREY, false);
+            for (i, p) in players.iter().enumerate() {
+                let Some(r) = l.row(i, *first_row) else { continue };
+                let over = inside(r, mouse);
+                frame(host, batch, r, if over { TILE_HOVER } else { TILE }, if p.shared { 0xFF_C8_96_2A } else { 0xFF_5A_3F_78 });
+                let name = if p.online { p.name.clone() } else { format!("{} (offline)", p.name) };
+                host.text(batch, &fit(host, &name, r[2] - 80.0), [r[0] + 5.0, r[1] + 4.0], if p.online { WHITE } else { GREY }, false);
+                let (state, colour) = if p.shared { ("Can use", GOLD) } else { ("-", GREY) };
+                let sw = host.text_width(state);
+                host.text(batch, state, [r[0] + r[2] - 6.0 - sw, r[1] + 4.0], colour, false);
+            }
+            if players.is_empty() {
+                host.text(batch, "Nobody else is online", [l.view[0], l.view[1] + 4.0], GREY, false);
+            } else if players.len() > l.visible_rows {
+                let more = format!("{}-{} of {}", first_row + 1, (first_row + l.visible_rows).min(players.len()), players.len());
+                host.text(batch, &more, [l.panel[0] + PAD, l.back[1] + 6.0], GREY, false);
+            }
+            button(host, batch, l.back, "Back", mouse, WHITE);
+        }
+        Ui::Naming { text, locked, global, current, players, .. } => {
             host.fill(batch, window, 0x90_00_00_00);
             let l = NamingLayout::new(w, h);
             frame(host, batch, l.panel, PANEL, EDGE);
@@ -226,9 +307,19 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
             }
             let (label, colour) = if *locked { ("Locked", GOLD) } else { ("Lock", WHITE) };
             button(host, batch, l.lock, label, mouse, colour);
+            button(host, batch, l.share, "Share...", mouse, if *locked { WHITE } else { 0x60_60_60 });
             button(host, batch, l.done, "Done", mouse, WHITE);
-            let hint = if *locked { "Only you can use it" } else { "Everyone can use it" };
-            host.text(batch, hint, [l.panel[0] + 12.0, l.panel[1] + 96.0], GREY, false);
+            let shared = players.iter().filter(|p| p.shared).count();
+            let hint = match (*locked, *global) {
+                (true, _) if shared == 1 => "Only you and 1 player you shared it with".to_owned(),
+                (true, _) if shared > 1 => format!("Only you and {shared} players you shared it with"),
+                (true, _) => "Only you can use it. Share it with players".to_owned(),
+                (false, true) => "Global: everyone can use it".to_owned(),
+                (false, false) => "Players who have found it can use it".to_owned(),
+            };
+            host.text(batch, &fit(host, &hint, l.panel[2] - 24.0), [l.panel[0] + 12.0, l.panel[1] + 96.0], GREY, false);
+            let tip = if *locked { "" } else if *global { "A Yukari umbrella on it (used up) ends global" } else { "Lock it to share it; a Yukari umbrella (used up) makes it global" };
+            host.text(batch, &fit(host, tip, l.panel[2] - 24.0), [l.panel[0] + 12.0, l.panel[1] + 110.0], 0x70_70_70, false);
         }
         Ui::List { entries, first_row, .. } => {
             host.fill(batch, window, 0x90_00_00_00);
@@ -251,7 +342,13 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
                 let name = fit(host, &e.name, r[2] - 28.0);
                 host.text(batch, &name, [text_x, r[1] + 6.0], WHITE, true);
                 let place = dimension_label(&e.key.0);
-                let line = if e.locked { format!("{place} - Locked") } else { place.to_owned() };
+                let line = if e.locked {
+                    format!("{place} - Locked")
+                } else if e.global {
+                    format!("{place} - Global")
+                } else {
+                    place.to_owned()
+                };
                 host.text(batch, &fit(host, &line, r[2] - 28.0), [text_x, r[1] + 19.0], if e.locked { GOLD } else { GREY }, false);
             }
             if let (Some(track), Some(thumb)) = (l.track, l.thumb(*first_row)) {
@@ -263,7 +360,7 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
                     let (dim, [x, y, z]) = &e.key;
                     format!("{}  -  {x}, {y}, {z}  ({})", e.name, dimension_label(dim))
                 }
-                None if entries.is_empty() => "No other gaps yet".to_owned(),
+                None if entries.is_empty() => "No other gaps found yet: right-click a gap to find it".to_owned(),
                 None => "Click a gap to go there".to_owned(),
             };
             let fy = l.panel[1] + l.panel[3] - FOOTER + 2.0;
@@ -274,10 +371,15 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
 
 // ---- Input ----
 
+/// What Done sends: the name and lock (global and sharing are the server's, not sent).
+fn named(key: &Key, text: &str, locked: bool) -> store::Naming {
+    store::Naming { key: key.clone(), name: text.to_owned(), locked, global: false, players: Vec::new() }
+}
+
 /// A typed character, for the name.
 pub fn typed(c: char) {
     if let Ok(mut ui) = UI.lock()
-        && let Ui::Naming { text, .. } = &mut *ui
+        && let Ui::Naming { text, sharing: false, .. } = &mut *ui
         && !c.is_control()
         && text.chars().count() < NAME_MAX
     {
@@ -292,12 +394,20 @@ pub fn key(name: &str) -> bool {
         return false;
     }
     match &mut *ui {
+        Ui::Naming { players, sharing: true, first_row, .. } => {
+            let max = ShareLayout::new(1.0e4, 1.0e4, players.len()).max_first_row();
+            match name {
+                "key.keyboard.up" | "key.keyboard.page.up" => *first_row = first_row.saturating_sub(1),
+                "key.keyboard.down" | "key.keyboard.page.down" => *first_row = (*first_row + 1).min(max),
+                _ => {}
+            }
+        }
         Ui::Naming { key, text, locked, .. } => match name {
             "key.keyboard.backspace" => {
                 text.pop();
             }
             "key.keyboard.enter" | "key.keyboard.keypad.enter" => {
-                let naming = store::Naming { key: key.clone(), name: text.clone(), locked: *locked };
+                let naming = named(key, text, *locked);
                 send(store::NAMED, store::encode_naming(&naming));
             }
             _ => {}
@@ -321,12 +431,28 @@ pub fn pressed(window: Rect, mouse: [f32; 2], button_: i32) {
     }
     let Ok(mut ui) = UI.lock() else { return };
     match &mut *ui {
-        Ui::Naming { key, text, locked, .. } => {
+        Ui::Naming { key, players, sharing: sharing @ true, first_row, .. } => {
+            let l = ShareLayout::new(window[2], window[3], players.len());
+            if inside(l.back, mouse) {
+                *sharing = false;
+                return;
+            }
+            let first = *first_row;
+            if let Some(p) = players.iter_mut().enumerate().find_map(|(i, p)| l.row(i, first).filter(|r| inside(*r, mouse)).map(|_| p)) {
+                p.shared = !p.shared;
+                let share = store::Share { key: key.clone(), player: p.uuid, name: p.name.clone(), on: p.shared };
+                send_open(store::SHARE, store::encode_share(&share));
+            }
+        }
+        Ui::Naming { key, text, locked, sharing, first_row, .. } => {
             let l = NamingLayout::new(window[2], window[3]);
             if inside(l.lock, mouse) {
                 *locked = !*locked;
+            } else if inside(l.share, mouse) && *locked {
+                *sharing = true;
+                *first_row = 0;
             } else if inside(l.done, mouse) {
-                let naming = store::Naming { key: key.clone(), name: text.clone(), locked: *locked };
+                let naming = named(key, text, *locked);
                 send(store::NAMED, store::encode_naming(&naming));
             }
         }
@@ -367,10 +493,19 @@ pub fn dragged(window: Rect, mouse: [f32; 2]) {
 }
 
 pub fn scrolled(window: Rect, by: f64) {
-    if let Ok(mut ui) = UI.lock()
-        && let Ui::List { entries, first_row, .. } = &mut *ui
+    let Ok(mut ui) = UI.lock() else { return };
+    let (first_row, max) = match &mut *ui {
+        Ui::List { entries, first_row, .. } => {
+            let max = ListLayout::new(window[2], window[3], entries.len()).max_first_row();
+            (first_row, max)
+        }
+        Ui::Naming { players, sharing: true, first_row, .. } => {
+            let max = ShareLayout::new(window[2], window[3], players.len()).max_first_row();
+            (first_row, max)
+        }
+        _ => return,
+    };
     {
-        let max = ListLayout::new(window[2], window[3], entries.len()).max_first_row();
         if by > 0.0 {
             *first_row = first_row.saturating_sub(1);
         } else if by < 0.0 {
@@ -406,6 +541,53 @@ mod tests {
         let track = many.track.unwrap();
         assert_eq!(many.row_at(track[1]), 0);
         assert_eq!(many.row_at(track[1] + track[3]), end);
+    }
+
+    #[test]
+    fn the_sharing_rows_scroll_and_stay_in_the_panel() {
+        let l = ShareLayout::new(427.0, 240.0, 40);
+        assert!(l.visible_rows < 40);
+        assert!(l.row(0, 0).is_some());
+        assert!(l.row(l.visible_rows, 0).is_none());
+        assert!(l.row(39, l.max_first_row()).is_some());
+        assert!(l.row(40, 0).is_none(), "no row past the last player");
+        for i in 0..l.visible_rows {
+            let r = l.row(i, 0).unwrap();
+            assert!(r[1] + r[3] <= l.back[1], "rows end above the Back button");
+            assert!(r[0] >= l.panel[0] && r[0] + r[2] <= l.panel[0] + l.panel[2]);
+        }
+    }
+
+    #[test]
+    fn sharing_a_player_sends_and_keeps_the_screen_open() {
+        let key: Key = ("minecraft:overworld".into(), [1, 64, 1]);
+        let players = vec![Player { uuid: 9, name: "Bob".into(), shared: false, online: true }];
+        *UI.lock().unwrap() = Ui::Naming {
+            key: key.clone(),
+            current: "Home".into(),
+            text: String::new(),
+            locked: true,
+            global: false,
+            players,
+            sharing: false,
+            first_row: 0,
+        };
+        *OUTBOX.lock().unwrap() = Outbox::default();
+        let (w, h) = (427.0, 240.0);
+        let n = NamingLayout::new(w, h);
+        pressed([0.0, 0.0, w, h], [n.share[0] + 2.0, n.share[1] + 2.0], 0);
+        assert!(matches!(&*UI.lock().unwrap(), Ui::Naming { sharing: true, .. }));
+        let s = ShareLayout::new(w, h, 1);
+        let r = s.row(0, 0).unwrap();
+        pressed([0.0, 0.0, w, h], [r[0] + 2.0, r[1] + 2.0], 0);
+        let out = std::mem::take(&mut *OUTBOX.lock().unwrap());
+        assert!(!out.close);
+        assert_eq!(out.messages.len(), 1);
+        assert_eq!(out.messages[0].0, store::SHARE);
+        assert_eq!(store::decode_share(&out.messages[0].1).map(|s| (s.player, s.on)), Some((9, true)));
+        pressed([0.0, 0.0, w, h], [s.back[0] + 2.0, s.back[1] + 2.0], 0);
+        assert!(matches!(&*UI.lock().unwrap(), Ui::Naming { sharing: false, .. }));
+        *UI.lock().unwrap() = Ui::Closed;
     }
 
     #[test]
