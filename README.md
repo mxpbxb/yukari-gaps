@@ -39,7 +39,8 @@ Install both from the launcher's Mods page, then press Build:
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
 - **Travel is free**, however far, and to any dimension.
 - **Sneak and right-click** your own gap to rename it, change its lock or who it is shared with.
-- In the world the gap is an eye-gap picture, with long trailing ends, that leans 45 degrees and always turns to face you.
+- In the world the gap is pipef0x's Yukari Gap Demo look: an S-shaped gap that slowly breathes, full of
+  drifting purple fog and wandering eyes, with a red bow swinging at each tip. It always turns to face you.
   You can walk into it. Click or break it up at the picture, in the block above the one you placed
   it on.
 
@@ -48,12 +49,16 @@ The world keeps its gaps in `<world>/yukari_gap/gaps.tsv`.
 ## Building
 
 `gen_yukari_gap.py art/gap.png art/shard.png content` writes the content mod from the art.
+`bake_gap.py content/assets/yukari_gap/textures/entity/gap.png` then bakes the gap's picture over it:
+pipef0x's gap shader, run in Python into 192 frames (48 seconds, looping) with its `.mcmeta`.
 `cargo horizon-mod build` in `content/` makes the `.hmod`; the native mod's source is `native/`, built
 by the Horizon launcher (`native-build`).
 
 ## Credits
 
 - Code and art by mxpbxb. MIT licensed: see `LICENSE`.
+- The gap's look (its shader, baked into `textures/entity/gap.png`) and the bow (`textures/entity/bow.png`)
+  are from [Yukari Gap Demo](https://github.com/pipef0x/Yukari-Gap-Demo) by pipef0x, MIT licensed.
 - Inspired by [Waystones](https://www.curseforge.com/minecraft/mc-mods/waystones) by BlayTheNinth.
   No code or assets of Waystones are in this mod.
 - Yukari Yakumo and her gaps are from the Touhou Project by ZUN (Team Shanghai Alice). This is a
