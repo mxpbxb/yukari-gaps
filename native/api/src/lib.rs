@@ -1,7 +1,7 @@
 //! Yukari Gaps Beta for Horizon: gaps to travel between, inspired by Waystones. MIT licensed.
 //!
-//! A gap is one block; its block entity draws the gap, pipef0x's Yukari Gap Demo look with its two
-//! swinging bows, turned on its upright axis to face whoever looks at it. Place one and name it, and lock it if only you should use it.
+//! A gap is one block; its block entity draws the gap, pipef0x's Yukari Gap Demo look with a bow
+//! at each tip, turned on its upright axis to face whoever looks at it. Place one and name it, and lock it if only you should use it.
 //! Right-click any gap to see every other gap you may use, and click one to go there for free.
 //! Others have to find a gap (right-click it once) before they can travel to it, unless its owner
 //! made it global with a Yukari umbrella. A locked gap is only its owner's, and of the players
@@ -53,10 +53,6 @@ const GAP_TIP: f32 = 0.125;
 const GAP_LIFT: f32 = 1.0 - GAP_SIZE * GAP_TIP;
 /// How big a bow is, in blocks: the demo's 0.45 of its 2 block gap.
 const BOW_SIZE: f32 = GAP_SIZE * 0.225;
-/// How far a bow swings each way, in degrees (the demo's 2π/16), and how long a swing there and
-/// back takes, in ticks (the demo's 4 seconds).
-const BOW_SWING: f32 = 22.5;
-const BOW_PERIOD: f64 = 80.0;
 /// Full bright, sky and block light 15: the demo's gap and bows ignore the light.
 const FULL_BRIGHT: u32 = 240 | 240 << 8;
 
@@ -664,7 +660,7 @@ impl Hooks for Mod {
     }
 
     /// The gap's picture, above the block, turned on its upright axis to face the camera
-    /// wherever it is, with a bow swinging at each tip, as pipef0x's Yukari Gap Demo draws it.
+    /// wherever it is, with a bow at each tip, as pipef0x's Yukari Gap Demo draws it.
     fn block_entity_submit(&self, host: &dyn Host, event: &mut BlockEntitySubmitEvent<'_>) {
         if event.block != GAP || host.block_state_property(event.state, "half") == Some("upper") {
             return;
@@ -673,7 +669,6 @@ impl Hooks for Mod {
         let dx = camera.position[0] - (f64::from(event.pos[0]) + 0.5);
         let dz = camera.position[2] - (f64::from(event.pos[2]) + 0.5);
         let draw = &mut *event.draw;
-        let swing = bow_swing(draw.game_time as f64 + f64::from(draw.partial));
         let light = draw.light;
         draw.light = FULL_BRIGHT;
         draw.push();
@@ -688,11 +683,10 @@ impl Hooks for Mod {
         let z = 0.5 - 0.002;
         let back = [[right, top, z], [right, bottom, z], [left, bottom, z], [left, top, z]];
         host.draw_quad(draw, GAP_SPRITE, back, [16.0, 0.0, 0.0, 16.0], 0xFF_FF_FF);
-        // The bows, a little in front of the gap: the top one swings one way as the bottom one
-        // swings the other.
+        // The bows, a little in front of the gap, holding still at its tips.
         let inset = GAP_SIZE * GAP_TIP;
-        draw_bow(host, draw, [left + inset, top - inset], swing);
-        draw_bow(host, draw, [right - inset, bottom + inset], -swing);
+        draw_bow(host, draw, [left + inset, top - inset]);
+        draw_bow(host, draw, [right - inset, bottom + inset]);
         draw.pop();
         draw.light = light;
     }
@@ -710,43 +704,22 @@ impl Hooks for Mod {
     }
 }
 
-/// How far the top bow is turned at `ticks` (game time plus partial tick), in degrees: there and
-/// back across `BOW_SWING` each way every `BOW_PERIOD` ticks, eased in and out cubically.
-fn bow_swing(ticks: f64) -> f32 {
-    let cycle = (ticks / BOW_PERIOD).rem_euclid(1.0);
-    let ramp = if cycle < 0.5 { cycle * 2.0 } else { 2.0 - cycle * 2.0 };
-    let eased = if ramp < 0.5 { 4.0 * ramp * ramp * ramp } else { 1.0 - (-2.0 * ramp + 2.0).powi(3) / 2.0 };
-    (-1.0 + 2.0 * eased) as f32 * BOW_SWING
-}
-
-/// A bow centred at `at` (x, y) on the gap's plane, a hair in front of it and turned `degrees`
-/// about its middle; its back too, a hair behind the gap's back.
-fn draw_bow(host: &dyn Host, draw: &mut horizon_client::mod_api::BlockEntityDraw, at: [f32; 2], degrees: f32) {
+/// A bow centred at `at` (x, y) on the gap's plane, a hair in front of it; its back too, a hair
+/// behind the gap's back.
+fn draw_bow(host: &dyn Host, draw: &mut horizon_client::mod_api::BlockEntityDraw, at: [f32; 2]) {
     let h = BOW_SIZE / 2.0;
     let [x, y] = at;
-    draw.push();
-    draw.rotate_about([0.0, 0.0, 1.0], degrees, [x, y, 0.5]);
     let z = 0.5 + 0.005;
     let front = [[x - h, y + h, z], [x - h, y - h, z], [x + h, y - h, z], [x + h, y + h, z]];
     host.draw_quad(draw, BOW_SPRITE, front, [0.0, 0.0, 16.0, 16.0], 0xFF_FF_FF);
     let z = 0.5 - 0.007;
     let back = [[x + h, y + h, z], [x + h, y - h, z], [x - h, y - h, z], [x - h, y + h, z]];
     host.draw_quad(draw, BOW_SPRITE, back, [16.0, 0.0, 0.0, 16.0], 0xFF_FF_FF);
-    draw.pop();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_bows_swing_there_and_back() {
-        assert_eq!(bow_swing(0.0), -BOW_SWING);
-        assert!((bow_swing(BOW_PERIOD / 2.0) - BOW_SWING).abs() < 1e-4);
-        assert!(bow_swing(BOW_PERIOD / 4.0).abs() < 1e-4);
-        assert_eq!(bow_swing(BOW_PERIOD), bow_swing(0.0));
-        assert_eq!(bow_swing(-BOW_PERIOD / 2.0), bow_swing(BOW_PERIOD / 2.0));
-    }
 
     #[test]
     fn the_lower_tip_sits_on_the_block() {

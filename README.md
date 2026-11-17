@@ -40,7 +40,7 @@ Install both from the launcher's Mods page, then press Build:
 - **Travel is free**, however far, and to any dimension.
 - **Sneak and right-click** your own gap to rename it, change its lock or who it is shared with.
 - In the world the gap is pipef0x's Yukari Gap Demo look: an S-shaped gap that slowly breathes, full of
-  drifting purple fog and wandering eyes, with a red bow swinging at each tip. It always turns to face you.
+  drifting purple fog and wandering eyes, with a red bow at each tip. It always turns to face you.
   You can walk into it. Click or break it up at the picture, in the block above the one you placed
   it on.
 
