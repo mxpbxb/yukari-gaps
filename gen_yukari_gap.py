@@ -28,6 +28,9 @@ def write_bytes(path, data):
 write_bytes(oa / "textures" / "entity" / "gap.png", picture.read_bytes())
 # The item: the shard.
 write_bytes(oa / "textures" / "item" / f"{GAP}.png", icon.read_bytes())
+# An animated icon brings its .mcmeta along.
+if icon.with_name(icon.name + ".mcmeta").exists():
+    write_bytes(oa / "textures" / "item" / f"{GAP}.png.mcmeta", icon.with_name(icon.name + ".mcmeta").read_bytes())
 
 # The block: glass underneath (it hides nothing beside it), an empty model (the native mod draws
 # the gap), and nothing to bump into, so you can walk into it. It is two blocks, a lower and an

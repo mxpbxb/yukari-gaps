@@ -59,6 +59,9 @@ by the Horizon launcher (`native-build`).
 - Code and art by mxpbxb. MIT licensed: see `LICENSE`.
 - The gap's look (its shader, baked into `textures/entity/gap.png`) and the bow (`textures/entity/bow.png`)
   are from [Yukari Gap Demo](https://github.com/pipef0x/Yukari-Gap-Demo) by pipef0x, MIT licensed.
+- The gap item's animated icon (`textures/item/yukari_gap.png`, `art/shard.png`) is Touhou Little Maid's wireless IO art
+  by TartaricAcid and others, by way of Alice Dolls Restringed, under
+  [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 - Inspired by [Waystones](https://www.curseforge.com/minecraft/mc-mods/waystones) by BlayTheNinth.
   No code or assets of Waystones are in this mod.
 - Yukari Yakumo and her gaps are from the Touhou Project by ZUN (Team Shanghai Alice). This is a
