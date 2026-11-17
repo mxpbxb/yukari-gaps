@@ -32,8 +32,9 @@ Install both from the launcher's Mods page, then press Build:
 - **Find** a gap before you can travel to it: right-click it once. Your own gaps are found already.
 - **Make it global** with a **Yukari Umbrella**: right-click your own gap with one and everyone can
   travel to it without finding it (still not while it is locked); do it again to end it. Each use
-  takes the umbrella (not in Creative). Umbrellas can't be crafted: Yukari (Touhou Mobs) drops one
-  80 times in 100 when she dies. It is drawn as Touhou Items' parasol, so install that mod to see it.
+  takes the umbrella, in Creative too: each umbrella is good for one use. Umbrellas can't be
+  crafted: Yukari (Touhou Mobs) drops one 70 times in 100 when she is beaten, and Yukari Great Doll
+  every time. A Yukari who comes through a global gap is always the Great Doll. It is drawn as Touhou Items' parasol, so install that mod to see it.
 - **Right-click** any gap for every other gap you may use (found, global, or shared with you): tiles in rows, a new row when one is full,
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
 - **Travel is free**, however far, and to any dimension.

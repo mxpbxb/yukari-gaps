@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use horizon_client::mod_api::{
     BlockEntityEvent, BlockEntityRenderBoundingBoxEvent, BlockEntitySubmitEvent, ClientTickPostEvent,
-    Compound, DestroyBlockEvent, Flow, Hooks, Host, LivingDeathEvent, NativeServerPlayer, NetFromClientEvent,
+    Compound, DestroyBlockEvent, Flow, Hooks, Host, NativeServerPlayer, NetFromClientEvent,
     NetFromServerEvent, PlaceBlockEvent, RightClickBlockEvent, ScreenCharTypedPreEvent,
     ScreenKeyPressedPreEvent, ScreenMouseButtonPressedPreEvent, ScreenMouseButtonReleasedPreEvent,
     ScreenMouseDraggedPreEvent, ScreenMouseScrolledPreEvent, ScreenRenderPostEvent, Tag, Text,
@@ -35,30 +35,9 @@ struct Mod;
 /// The gap: its block, item and block entity type all have this id.
 const GAP: &str = "yukari_gap:yukari_gap";
 /// The Yukari umbrella: its owner right-clicks a gap with it to make it global, or not, which
-/// uses the umbrella up. It can't
-/// be crafted: only Yukari drops it.
+/// uses the umbrella up. It can't be crafted: Yukari drops it, 70 times in 100, and Yukari Great
+/// Doll every time (Touhou Mobs drops it, when one of its bosses is beaten for good).
 const UMBRELLA: &str = "yukari_gap:yukari_umbrella";
-/// The Yukaris who drop the umbrella when they die: Touhou Mobs' own, which brings Yukari
-/// through a gap after a traveller once in 2,000 (0.05%) itself (`thmobs_native`,
-/// `YUKARI_FROM_GAP`), so this mod doesn't roll for her too.
-const YUKARIS: [&str; 2] = ["thmobs:yukari", "thmobs:classic_yukari"];
-/// The chance, in percent, that a Yukari drops the umbrella.
-const UMBRELLA_CHANCE: u32 = 80;
-
-/// Whether a roll of 0 to 99 comes under `percent`.
-fn roll(percent: u32) -> bool {
-    static STATE: Mutex<u64> = Mutex::new(0);
-    let Ok(mut s) = STATE.lock() else { return false };
-    if *s == 0 {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);
-        *s = now | 1;
-    }
-    // xorshift64*
-    *s ^= *s >> 12;
-    *s ^= *s << 25;
-    *s ^= *s >> 27;
-    (s.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 32) % 100 < u64::from(percent)
-}
 /// The picture of the gap, from the content mod's `textures/entity/gap.png`.
 const GAP_SPRITE: &str = "yukari_gap:entity/gap";
 /// How big the picture is, in blocks.
@@ -531,10 +510,8 @@ impl Hooks for Mod {
         let owner = gap.owner == player.uuid || gap.owner == 0;
         if umbrella && owner {
             toggle_global(host, player.uuid, &key);
-            // An umbrella is used up by it (not in creative).
-            if player.game_mode != 1 {
-                host.take_items(UMBRELLA, 1);
-            }
+            // An umbrella is used up by it, in Creative too: one use each.
+            host.take_items(UMBRELLA, 1);
         } else if player.sneaking && owner {
             ask_name(host, player.uuid, &gap);
         } else if gap.locked && !gap.usable_by(player.uuid) {
@@ -548,22 +525,6 @@ impl Hooks for Mod {
             show_list(host, &player, &key);
         }
         Flow::Cancel
-    }
-
-    /// A Yukari dying drops the umbrella, 80 times in 100 (not when removed by a command or the void).
-    fn living_death(&self, host: &mut dyn Host, event: &mut LivingDeathEvent<'_>) -> Flow {
-        if YUKARIS.contains(&event.kind)
-            && !matches!(event.damage_type, "minecraft:out_of_world" | "minecraft:generic_kill")
-            && roll(UMBRELLA_CHANCE)
-            && let Some(e) = host.entity(event.entity)
-            && let (Some(at), Some(level)) = (host.entity_position(e), host.entity_level(e))
-        {
-            let dimension = level.dimension().to_owned();
-            let item: Compound = [("id".into(), Tag::String(UMBRELLA.into())), ("count".into(), Tag::Int(1))].into();
-            let nbt: Compound = [("Item".into(), Tag::Compound(item)), ("PickupDelay".into(), Tag::Short(10))].into();
-            host.summon(&dimension, "minecraft:item", [at[0], at[1] + 0.5, at[2]], nbt);
-        }
-        Flow::Continue
     }
 
     fn net_from_client(&self, host: &mut dyn Host, event: &mut NetFromClientEvent<'_>) {
@@ -758,15 +719,6 @@ mod tests {
             assert!(!store.gaps.iter().any(|g| g.name.eq_ignore_ascii_case(&name)), "{name}");
             store.gaps.push(gap(&name, i));
         }
-    }
-
-    #[test]
-    fn the_rolls_come_out_near_their_chances() {
-        let hits = |p| (0..20_000).filter(|_| roll(p)).count();
-        let umbrella = hits(UMBRELLA_CHANCE);
-        assert!((15_200..16_800).contains(&umbrella), "80% of 20 000 is about 16 000, got {umbrella}");
-        assert_eq!(hits(0), 0);
-        assert_eq!(hits(100), 20_000);
     }
 
     #[test]
