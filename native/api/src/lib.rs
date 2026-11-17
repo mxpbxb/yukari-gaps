@@ -43,6 +43,20 @@ const UMBRELLA: &str = "yukari_gap:yukari_umbrella";
 const GAP_SPRITE: &str = "yukari_gap:entity/gap";
 /// The bow tied at each tip of the gap, pipef0x's, from `textures/entity/bow.png`.
 const BOW_SPRITE: &str = "yukari_gap:entity/bow";
+/// The alt gap: a gap in every way, drawn with its own picture (`textures/entity/gap_alt.png`,
+/// baked by `bake_gap_alt.py` from a back wall and an eye).
+const GAP_ALT: &str = "yukari_gap:yukari_gap_alt";
+const GAP_ALT_SPRITE: &str = "yukari_gap:entity/gap_alt";
+
+/// Either gap block.
+fn is_gap(block: &str) -> bool {
+    block == GAP || block == GAP_ALT
+}
+
+/// The picture a gap block is drawn with.
+fn gap_sprite(block: &str) -> &'static str {
+    if block == GAP_ALT { GAP_ALT_SPRITE } else { GAP_SPRITE }
+}
 /// How big the picture is, in blocks.
 const GAP_SIZE: f32 = 2.25;
 /// Where the gap's tips are in the picture, from its top left and from its bottom right corner,
@@ -375,7 +389,7 @@ impl Hooks for Mod {
     /// A gap was placed: it faces the player (that side is where travellers come out), gets a
     /// name for now, and its owner is asked to name it.
     fn place_block(&self, host: &mut dyn Host, event: &mut PlaceBlockEvent<'_>) {
-        if *event.stack.item != *GAP {
+        if !is_gap(&event.stack.item) {
             return;
         }
         let Some(player) = host.acting_player() else { return };
@@ -418,7 +432,8 @@ impl Hooks for Mod {
 
     /// A broken gap is gone for everyone. A locked one only its owner can break.
     fn destroy_block(&self, host: &mut dyn Host, event: &mut DestroyBlockEvent) -> Flow {
-        if host.block(event.pos) != GAP {
+        let kind = host.block(event.pos);
+        if !is_gap(&kind) {
             return Flow::Continue;
         }
         let Ok(breaking) = BREAKING.lock() else { return Flow::Continue };
@@ -459,7 +474,7 @@ impl Hooks for Mod {
                     *b = true;
                 }
                 for pos in here {
-                    if host.block(pos) == GAP {
+                    if is_gap(&host.block(pos)) {
                         let _ = host.destroy_block(pos, None, true);
                     }
                 }
@@ -468,7 +483,7 @@ impl Hooks for Mod {
                 }
                 if !creative {
                     let at = [f64::from(lower[0]) + 0.5, f64::from(lower[1]) + 0.5, f64::from(lower[2]) + 0.5];
-                    let stack: Compound = [("id".into(), Tag::String(GAP.into())), ("count".into(), Tag::Int(1))].into();
+                    let stack: Compound = [("id".into(), Tag::String(kind.as_str().into())), ("count".into(), Tag::Int(1))].into();
                     let nbt: Compound = [("Item".into(), Tag::Compound(stack)), ("PickupDelay".into(), Tag::Short(10))].into();
                     host.summon(&player.dimension, "minecraft:item", at, nbt);
                 }
@@ -483,7 +498,7 @@ impl Hooks for Mod {
     /// Right-click a gap to find it and choose where to go. Its owner, sneaking, renames it,
     /// locks it or shares it; with a Yukari umbrella, makes it global or not.
     fn right_click_block(&self, host: &mut dyn Host, event: &mut RightClickBlockEvent) -> Flow {
-        if host.block(event.pos) != GAP {
+        if !is_gap(&host.block(event.pos)) {
             return Flow::Continue;
         }
         let Some(player) = host.acting_player() else { return Flow::Continue };
@@ -660,18 +675,19 @@ impl Hooks for Mod {
 
     /// Every gap has a block entity, which draws it.
     fn block_entity(&self, _: &mut dyn Host, event: &mut BlockEntityEvent<'_>) -> Option<(String, Compound)> {
-        (event.block == GAP).then(|| (GAP.to_owned(), Compound::default()))
+        is_gap(event.block).then(|| (GAP.to_owned(), Compound::default()))
     }
 
     /// The gap's picture, above the block, turned on its upright axis to face the camera
     /// wherever it is, with a bow swinging at each tip, as pipef0x's Yukari Gap Demo draws it.
     fn block_entity_submit(&self, host: &dyn Host, event: &mut BlockEntitySubmitEvent<'_>) {
-        if event.block != GAP || host.block_state_property(event.state, "half") == Some("upper") {
+        if !is_gap(event.block) || host.block_state_property(event.state, "half") == Some("upper") {
             return;
         }
         let Some(camera) = host.camera() else { return };
         let dx = camera.position[0] - (f64::from(event.pos[0]) + 0.5);
         let dz = camera.position[2] - (f64::from(event.pos[2]) + 0.5);
+        let sprite = gap_sprite(event.block);
         let draw = &mut *event.draw;
         let swing = bow_swing(draw.game_time as f64 + f64::from(draw.partial));
         let light = draw.light;
@@ -684,10 +700,10 @@ impl Hooks for Mod {
         // from there, should the turn ever leave the camera behind it.
         let z = 0.5;
         let front = [[left, top, z], [left, bottom, z], [right, bottom, z], [right, top, z]];
-        host.draw_quad(draw, GAP_SPRITE, front, [0.0, 0.0, 16.0, 16.0], 0xFF_FF_FF);
+        host.draw_quad(draw, sprite, front, [0.0, 0.0, 16.0, 16.0], 0xFF_FF_FF);
         let z = 0.5 - 0.002;
         let back = [[right, top, z], [right, bottom, z], [left, bottom, z], [left, top, z]];
-        host.draw_quad(draw, GAP_SPRITE, back, [16.0, 0.0, 0.0, 16.0], 0xFF_FF_FF);
+        host.draw_quad(draw, sprite, back, [16.0, 0.0, 0.0, 16.0], 0xFF_FF_FF);
         // The bows, a little in front of the gap: the top one swings one way as the bottom one
         // swings the other.
         let inset = GAP_SIZE * GAP_TIP;
@@ -699,7 +715,7 @@ impl Hooks for Mod {
 
     /// The tilted picture reaches past the block's usual margin: it is drawn while any of it is in view.
     fn block_entity_render_bounding_box(&self, _: &dyn Host, event: &mut BlockEntityRenderBoundingBoxEvent<'_>) {
-        if event.block != GAP {
+        if !is_gap(event.block) {
             return;
         }
         // Its corners, turned any way about the middle, stay within half the diagonal of it; and
@@ -746,6 +762,14 @@ mod tests {
         assert!(bow_swing(BOW_PERIOD / 4.0).abs() < 1e-4);
         assert_eq!(bow_swing(BOW_PERIOD), bow_swing(0.0));
         assert_eq!(bow_swing(-BOW_PERIOD / 2.0), bow_swing(BOW_PERIOD / 2.0));
+    }
+
+    #[test]
+    fn the_alt_gap_is_a_gap_with_its_own_picture() {
+        assert!(is_gap(GAP) && is_gap(GAP_ALT));
+        assert!(!is_gap("minecraft:glass"));
+        assert_eq!(gap_sprite(GAP), GAP_SPRITE);
+        assert_eq!(gap_sprite(GAP_ALT), GAP_ALT_SPRITE);
     }
 
     #[test]
