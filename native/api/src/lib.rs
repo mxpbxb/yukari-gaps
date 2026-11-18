@@ -4,7 +4,7 @@
 //! swinging bows, turned on its upright axis to face whoever looks at it. Place one and name it, and lock it if only you should use it.
 //! Right-click any gap to see every other gap you may use, and click one to go there for free.
 //! Others have to find a gap (right-click it once) before they can travel to it, unless its owner
-//! made it global with a Yukari umbrella. A locked gap is only its owner's, and of the players
+//! made it global with a Yukari umbrella, which makes it a Giga Gap. A locked gap is only its owner's, and of the players
 //! they share it with. Sneak and right-click your own to rename it, lock it or share it.
 
 mod store;
@@ -43,19 +43,20 @@ const UMBRELLA: &str = "yukari_gap:yukari_umbrella";
 const GAP_SPRITE: &str = "yukari_gap:entity/gap";
 /// The bow tied at each tip of the gap, pipef0x's, from `textures/entity/bow.png`.
 const BOW_SPRITE: &str = "yukari_gap:entity/bow";
-/// The alt gap: a gap in every way, drawn with its own picture (`textures/entity/gap_alt.png`,
-/// baked by `bake_gap_alt.py` from a back wall and an eye).
-const GAP_ALT: &str = "yukari_gap:yukari_gap_alt";
-const GAP_ALT_SPRITE: &str = "yukari_gap:entity/gap_alt";
+/// The Giga Gap: what a gap becomes when it is made global, and turns back from. A gap in every
+/// way, drawn bigger with its own picture (`textures/entity/giga_gap.png`, baked by
+/// `bake_gap_alt.py` from a back wall and an eye). It has no item: it drops a Yukari Gap.
+const GIGA: &str = "yukari_gap:giga_gap";
+const GIGA_SPRITE: &str = "yukari_gap:entity/giga_gap";
 
 /// Either gap block.
 fn is_gap(block: &str) -> bool {
-    block == GAP || block == GAP_ALT
+    block == GAP || block == GIGA
 }
 
 /// The picture a gap block is drawn with.
 fn gap_sprite(block: &str) -> &'static str {
-    if block == GAP_ALT { GAP_ALT_SPRITE } else { GAP_SPRITE }
+    if block == GIGA { GIGA_SPRITE } else { GAP_SPRITE }
 }
 /// How big the picture is, in blocks.
 const GAP_SIZE: f32 = 2.25;
@@ -64,12 +65,12 @@ const GAP_SIZE: f32 = 2.25;
 const GAP_TIP: f32 = 0.125;
 /// How big a bow is, as a share of its gap: the demo's 0.45 of its 2 block gap.
 const BOW_SHARE: f32 = 0.225;
-/// How much bigger the alt gap is drawn than the gap, bows and all.
-const ALT_SCALE: f32 = 1.25;
+/// How much bigger the Giga Gap is drawn than the gap, bows and all.
+const GIGA_SCALE: f32 = 1.25;
 
 /// How big a gap block's picture is, in blocks.
 fn gap_size(block: &str) -> f32 {
-    if block == GAP_ALT { GAP_SIZE * ALT_SCALE } else { GAP_SIZE }
+    if block == GIGA { GAP_SIZE * GIGA_SCALE } else { GAP_SIZE }
 }
 
 /// How far above the block a picture `size` blocks big has its bottom edge: low enough that the
@@ -287,7 +288,22 @@ fn share(host: &mut dyn Host, uuid: u128, s: store::Share) {
     }
 }
 
-/// Its owner right-clicked the gap with a Yukari umbrella: it turns global, or back.
+/// Makes the gap at `lower` a Giga Gap, or a Yukari Gap again, both halves, if it isn't already.
+fn set_kind(host: &mut dyn Host, dimension: &str, lower: [i32; 3], giga: bool) {
+    let block = if giga { GIGA } else { GAP };
+    if host.block(lower) == block || !is_gap(&host.block(lower)) {
+        return;
+    }
+    let Some(state) = host.default_state(block) else { return };
+    let up = above(lower);
+    if is_gap(&host.block(up)) {
+        host.set_block(dimension, up, state, 3);
+        host.set_block_property(up, "half", "upper");
+    }
+    host.set_block(dimension, lower, state, 3);
+}
+
+/// Its owner right-clicked the gap with a Yukari umbrella: it turns global, a Giga Gap, or back.
 fn toggle_global(host: &mut dyn Host, uuid: u128, key: &Key) {
     let result = with_store(host, |s| match s.find_mut(key) {
         Some(g) if g.owner == uuid || g.owner == 0 => {
@@ -298,11 +314,14 @@ fn toggle_global(host: &mut dyn Host, uuid: u128, key: &Key) {
         _ => (None, false),
     })
     .flatten();
+    if let Some((_, global, _)) = &result {
+        set_kind(host, &key.0, key.1, *global);
+    }
     let text = match result {
-        Some((name, true, true)) => format!("{name} is global, but locked: unlock it to open it to everyone"),
-        Some((name, true, false)) => format!("{name} is global: everyone can use it"),
-        Some((name, false, _)) => format!("{name} is no longer global: players have to find it"),
-        None => "Only its owner can make this gap global".to_owned(),
+        Some((name, true, true)) => format!("{name} is a Giga Gap, but locked: unlock it to open it to everyone"),
+        Some((name, true, false)) => format!("{name} is a Giga Gap: everyone can use it"),
+        Some((name, false, _)) => format!("{name} is no longer a Giga Gap: players have to find it"),
+        None => "Only its owner can make this gap a Giga Gap".to_owned(),
     };
     host.action_bar(uuid, Text::literal(text));
 }
@@ -400,7 +419,7 @@ impl Hooks for Mod {
     /// A gap was placed: it faces the player (that side is where travellers come out), gets a
     /// name for now, and its owner is asked to name it.
     fn place_block(&self, host: &mut dyn Host, event: &mut PlaceBlockEvent<'_>) {
-        if !is_gap(&event.stack.item) {
+        if &*event.stack.item != GAP {
             return;
         }
         let Some(player) = host.acting_player() else { return };
@@ -494,7 +513,8 @@ impl Hooks for Mod {
                 }
                 if !creative {
                     let at = [f64::from(lower[0]) + 0.5, f64::from(lower[1]) + 0.5, f64::from(lower[2]) + 0.5];
-                    let stack: Compound = [("id".into(), Tag::String(kind.as_str().into())), ("count".into(), Tag::Int(1))].into();
+                    // A Giga Gap drops the Yukari Gap it was made from.
+                    let stack: Compound = [("id".into(), Tag::String(GAP.into())), ("count".into(), Tag::Int(1))].into();
                     let nbt: Compound = [("Item".into(), Tag::Compound(stack)), ("PickupDelay".into(), Tag::Short(10))].into();
                     host.summon(&player.dimension, "minecraft:item", at, nbt);
                 }
@@ -543,6 +563,8 @@ impl Hooks for Mod {
         })
         .flatten();
         let Some((gap, newly_found)) = found else { return Flow::Cancel };
+        // A gap made global before Giga Gaps were is made one now.
+        set_kind(host, &key.0, key.1, gap.global);
         let owner = gap.owner == player.uuid || gap.owner == 0;
         if umbrella && owner {
             toggle_global(host, player.uuid, &key);
@@ -780,25 +802,25 @@ mod tests {
     }
 
     #[test]
-    fn the_alt_gap_is_a_gap_with_its_own_picture() {
-        assert!(is_gap(GAP) && is_gap(GAP_ALT));
+    fn the_giga_gap_is_a_gap_with_its_own_picture() {
+        assert!(is_gap(GAP) && is_gap(GIGA));
         assert!(!is_gap("minecraft:glass"));
         assert_eq!(gap_sprite(GAP), GAP_SPRITE);
-        assert_eq!(gap_sprite(GAP_ALT), GAP_ALT_SPRITE);
+        assert_eq!(gap_sprite(GIGA), GIGA_SPRITE);
     }
 
     #[test]
     fn the_lower_tip_sits_on_the_block() {
         assert!((gap_lift(GAP_SIZE) + GAP_SIZE * GAP_TIP - 1.0).abs() < 1e-6);
-        // The bigger alt gap's lower tip sits on the block too.
-        let alt = gap_size(GAP_ALT);
+        // The bigger Giga Gap's lower tip sits on the block too.
+        let alt = gap_size(GIGA);
         assert!((gap_lift(alt) + alt * GAP_TIP - 1.0).abs() < 1e-6);
     }
 
     #[test]
-    fn the_alt_gap_is_a_quarter_bigger() {
+    fn the_giga_gap_is_a_quarter_bigger() {
         assert_eq!(gap_size(GAP), GAP_SIZE);
-        assert!((gap_size(GAP_ALT) - GAP_SIZE * 1.25).abs() < 1e-6);
+        assert!((gap_size(GIGA) - GAP_SIZE * 1.25).abs() < 1e-6);
     }
 
     fn gap(name: &str, x: i32) -> Gap {

@@ -314,11 +314,11 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
                 (true, _) if shared == 1 => "Only you and 1 player you shared it with".to_owned(),
                 (true, _) if shared > 1 => format!("Only you and {shared} players you shared it with"),
                 (true, _) => "Only you can use it. Share it with players".to_owned(),
-                (false, true) => "Global: everyone can use it".to_owned(),
+                (false, true) => "Giga Gap: everyone can use it".to_owned(),
                 (false, false) => "Players who have found it can use it".to_owned(),
             };
             host.text(batch, &fit(host, &hint, l.panel[2] - 24.0), [l.panel[0] + 12.0, l.panel[1] + 96.0], GREY, false);
-            let tip = if *locked { "" } else if *global { "A Yukari umbrella on it (used up) ends global" } else { "Lock it to share it; a Yukari umbrella (used up) makes it global" };
+            let tip = if *locked { "" } else if *global { "A Yukari umbrella on it (used up) makes it a Yukari Gap again" } else { "Lock it to share it; a Yukari umbrella (used up) makes it a Giga Gap" };
             host.text(batch, &fit(host, tip, l.panel[2] - 24.0), [l.panel[0] + 12.0, l.panel[1] + 110.0], 0x70_70_70, false);
         }
         Ui::List { entries, first_row, .. } => {
@@ -345,7 +345,7 @@ pub fn draw(host: &dyn Host, batch: &mut HudBatch, window: Rect, mouse: [f32; 2]
                 let line = if e.locked {
                     format!("{place} - Locked")
                 } else if e.global {
-                    format!("{place} - Global")
+                    format!("{place} - Giga Gap")
                 } else {
                     place.to_owned()
                 };

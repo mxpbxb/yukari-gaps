@@ -6,7 +6,7 @@
       "conditions": [
         {
           "condition": "minecraft:block_state_property",
-          "block": "yukari_gap:yukari_gap_alt",
+          "block": "yukari_gap:giga_gap",
           "properties": {
             "half": "lower"
           }
@@ -18,7 +18,7 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "yukari_gap:yukari_gap_alt"
+          "name": "yukari_gap:yukari_gap"
         }
       ]
     }

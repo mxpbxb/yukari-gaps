@@ -1,9 +1,0 @@
-{
-  "type": "minecraft:crafting_shapeless",
-  "ingredients": [
-    "yukari_gap:yukari_gap_alt"
-  ],
-  "result": {
-    "id": "yukari_gap:yukari_gap"
-  }
-}

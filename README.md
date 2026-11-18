@@ -30,8 +30,9 @@ Install both from the launcher's Mods page, then press Build:
 - **Lock** it in the same window and only you can use it, or break it. While it is locked you can
   **share** it there with players: those online, and anyone it is already shared with.
 - **Find** a gap before you can travel to it: right-click it once. Your own gaps are found already.
-- **Make it global** with a **Yukari Umbrella**: right-click your own gap with one and everyone can
-  travel to it without finding it (still not while it is locked); do it again to end it. Each use
+- **Make it a Giga Gap** with a **Yukari Umbrella**: right-click your own gap with one and it becomes
+  a Giga Gap, global: everyone can travel to it without finding it (still not while it is locked).
+  Do it again to make it a Yukari Gap again. Each use
   takes the umbrella, in Creative too: each umbrella is good for one use. Umbrellas can't be
   crafted: Yukari (Touhou Mobs) drops one 70 times in 100 when she is beaten, and Yukari Great Doll
   every time. A Yukari who comes through a global gap is always the Great Doll. It is drawn as Touhou Items' parasol, so install that mod to see it.
@@ -43,9 +44,8 @@ Install both from the launcher's Mods page, then press Build:
   drifting purple fog and wandering eyes, with a red bow swinging at each tip. It always turns to face you.
   You can walk into it. Click or break it up at the picture, in the block above the one you placed
   it on.
-- **Yukari Gap (Alt)** is the same gap with another look, a quarter bigger: a dark back wall and
-  red-eyed eyes drifting across it. It can't be crafted: it is in the creative tab. Put an alt gap in the grid alone to
-  turn it into a Yukari Gap. Both kinds travel to each other.
+- A **Giga Gap** is drawn a quarter bigger, with another look: a dark back wall and red-eyed eyes
+  drifting across it. It has no item of its own: mined, it drops the Yukari Gap it was made from.
 
 The world keeps its gaps in `<world>/yukari_gap/gaps.tsv`.
 
@@ -54,8 +54,8 @@ The world keeps its gaps in `<world>/yukari_gap/gaps.tsv`.
 `gen_yukari_gap.py art/gap.png art/shard.png content` writes the content mod from the art.
 `bake_gap.py content/assets/yukari_gap/textures/entity/gap.png` then bakes the gap's picture over it:
 pipef0x's gap shader, run in Python into 192 frames (48 seconds, looping) with its `.mcmeta`.
-`bake_gap_alt.py art/gap_alt_back.png art/gap_alt_eye.png content/assets/yukari_gap/textures/entity/gap_alt.png`
-bakes the alt gap's picture: the same breathing gap and drifting eyes, filled with the back wall
+`bake_gap_alt.py art/gap_alt_back.png art/gap_alt_eye.png content/assets/yukari_gap/textures/entity/giga_gap.png`
+bakes the Giga Gap's picture: the same breathing gap and drifting eyes, filled with the back wall
 picture, each eye drawn as the eye picture. The back may be animated: draw its frames as one PNG,
 square frames stacked top to bottom (64x64 each, so 64 wide and 64 x N tall), and bake again. The
 gap shows the next back frame four times a second, so 8 frames make a 2-second pulse; for a clean
@@ -68,9 +68,8 @@ by the Horizon launcher (`native-build`).
 - Code and art by mxpbxb. MIT licensed: see `LICENSE`.
 - The gap's look (its shader, baked into `textures/entity/gap.png`) and the bow (`textures/entity/bow.png`)
   are from [Yukari Gap Demo](https://github.com/pipef0x/Yukari-Gap-Demo) by pipef0x, MIT licensed.
-  The alt gap (`textures/entity/gap_alt.png`) keeps its shape and eye motion, with mxpbxb's back wall
-  and eye (`art/gap_alt_back.png`, `art/gap_alt_eye.png`); its item is the first alt eye
-  (`art/gap_alt_item.png`).
+  The Giga Gap (`textures/entity/giga_gap.png`) keeps its shape and eye motion, with mxpbxb's back
+  wall and eye (`art/gap_alt_back.png`, `art/gap_alt_eye.png`).
 - The gap item's animated icon (`textures/item/yukari_gap.png`, `art/shard.png`) is Touhou Little Maid's wireless IO art
   by TartaricAcid and others, by way of Alice Dolls Restringed, under
   [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).

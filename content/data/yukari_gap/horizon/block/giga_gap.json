@@ -40,5 +40,5 @@
   "collision_shapes": {
     "default": []
   },
-  "item": true
+  "item": false
 }
