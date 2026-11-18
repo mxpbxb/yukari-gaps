@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use horizon_client::mod_api::{
     BlockEntityEvent, BlockEntityRenderBoundingBoxEvent, BlockEntitySubmitEvent, ClientTickPostEvent,
-    Compound, DestroyBlockEvent, Flow, Hooks, Host, NativeServerPlayer, NetFromClientEvent,
+    Compound, DestroyBlockEvent, Flow, Hooks, Host, InteractEntityEvent, NativeServerPlayer, NetFromClientEvent,
     NetFromServerEvent, PlaceBlockEvent, RightClickBlockEvent, ScreenCharTypedPreEvent,
     ScreenKeyPressedPreEvent, ScreenMouseButtonPressedPreEvent, ScreenMouseButtonReleasedPreEvent,
     ScreenMouseDraggedPreEvent, ScreenMouseScrolledPreEvent, ScreenRenderPostEvent, Tag, Text,
@@ -221,6 +221,47 @@ static OPENED_AT: LazyLock<Mutex<HashMap<u128, Key>>> = LazyLock::new(Default::d
 /// How near the gap a player has to stay for the trip to go.
 const REACH: f64 = 8.0;
 
+/// Alice Dolls Restringed's Yukari Doll: her owner's portable gap. A click opens the travel screen
+/// where she is, and she follows them through; she is no gap to travel to.
+const DOLL_KIND: &str = "minecraft:chicken";
+const YUKARI_DOLL: &str = "Yukari Doll";
+/// The tag Alice Dolls gives her, naming her owner.
+fn owner_tag(owner: u128) -> String {
+    format!("alice_dolls.owner.{owner:032x}")
+}
+/// The Yukari Doll each player last opened the travel screen at, instead of a gap.
+static PORTABLE: LazyLock<Mutex<HashMap<u128, u32>>> = LazyLock::new(Default::default);
+
+/// Whether Yukari Doll `id` is within reach of `player`.
+fn doll_near(host: &dyn Host, player: &NativeServerPlayer, id: u32) -> bool {
+    let Some(e) = host.entity(id) else { return false };
+    let here = host.entity_level(e).is_some_and(|l| l.dimension() == player.dimension);
+    here && host.entity_position(e).is_some_and(|at| {
+        (0..3).map(|i| (player.position[i] - at[i]).powi(2)).sum::<f64>() <= REACH * REACH
+    })
+}
+
+/// Sends `player` the travel screen from their Yukari Doll `id`: every gap they may go to.
+fn show_portable(host: &mut dyn Host, player: &NativeServerPlayer, id: u32) {
+    let entries = with_store(host, |s| {
+        let list = s
+            .destinations(player.uuid, None)
+            .into_iter()
+            .map(|g| Entry { key: g.key(), name: g.name.clone(), locked: g.locked, global: g.global })
+            .collect::<Vec<_>>();
+        (list, false)
+    })
+    .unwrap_or_default();
+    if let Ok(mut opened) = OPENED_AT.lock() {
+        opened.remove(&player.uuid);
+    }
+    if let Ok(mut p) = PORTABLE.lock() {
+        p.insert(player.uuid, id);
+    }
+    host.play_local_sound("minecraft:block.amethyst_block.resonate", player.position, 1.0, 1.2, 0);
+    let _ = host.net_send_to_player(player.uuid, store::LIST, &store::encode_list(&entries));
+}
+
 fn player_named(host: &dyn Host, uuid: u128) -> Option<NativeServerPlayer> {
     host.server_players().into_iter().find(|p| p.uuid == uuid)
 }
@@ -340,6 +381,9 @@ fn show_list(host: &mut dyn Host, player: &NativeServerPlayer, origin: &Key) {
     if let Ok(mut opened) = OPENED_AT.lock() {
         opened.insert(player.uuid, origin.clone());
     }
+    if let Ok(mut p) = PORTABLE.lock() {
+        p.remove(&player.uuid);
+    }
     let _ = host.net_send_to_player(player.uuid, store::LIST, &store::encode_list(&entries));
 }
 
@@ -347,7 +391,11 @@ fn show_list(host: &mut dyn Host, player: &NativeServerPlayer, origin: &Key) {
 fn travel(host: &mut dyn Host, uuid: u128, to: &Key) {
     let Some(player) = player_named(host, uuid) else { return };
     let origin = OPENED_AT.lock().ok().and_then(|o| o.get(&uuid).cloned());
-    if !origin.is_some_and(|o| near(&player, &o)) {
+    let from_gap = origin.is_some_and(|o| near(&player, &o));
+    // Or from their Yukari Doll, beside them still.
+    let doll = if from_gap { None } else { PORTABLE.lock().ok().and_then(|p| p.get(&uuid).copied()) };
+    let doll = doll.filter(|&id| doll_near(host, &player, id));
+    if !from_gap && doll.is_none() {
         return;
     }
     let Some(gap) = with_store(host, |s| (s.find(to).cloned(), false)).flatten() else {
@@ -369,6 +417,12 @@ fn travel(host: &mut dyn Host, uuid: u128, to: &Key) {
     }
     if let Ok(mut opened) = OPENED_AT.lock() {
         opened.remove(&uuid);
+    }
+    // Yukari comes through after them, a step further out.
+    if let Some(id) = doll {
+        PORTABLE.lock().ok().map(|mut p| p.remove(&uuid));
+        let beside = [at[0] + f64::from(dx), at[1], at[2] + f64::from(dz)];
+        host.teleport_mob(&gap.dimension, id, beside);
     }
     host.play_local_sound("minecraft:entity.enderman.teleport", from, 1.0, 1.0, 0);
     host.play_local_sound("minecraft:entity.enderman.teleport", at, 1.0, 1.0, 0);
@@ -528,6 +582,26 @@ impl Hooks for Mod {
 
     /// Right-click a gap to find it and choose where to go. Its owner, sneaking, renames it,
     /// locks it or shares it; with a Yukari umbrella, makes it global or not.
+    /// Its owner clicked their Yukari Doll with an empty hand: the travel screen, from her.
+    fn interact_entity(&self, host: &mut dyn Host, event: &mut InteractEntityEvent<'_>) -> Flow {
+        if event.kind != DOLL_KIND || event.stack.is_some() {
+            return Flow::Continue;
+        }
+        let Ok(id) = u32::try_from(event.entity) else { return Flow::Continue };
+        let Some(e) = host.entity(id) else { return Flow::Continue };
+        if host.entity_name(e).as_deref() != Some(YUKARI_DOLL) {
+            return Flow::Continue;
+        }
+        let Some(player) = host.acting_player() else { return Flow::Continue };
+        if player.sneaking || !host.entity_tags(e).is_some_and(|t| t.contains(&owner_tag(player.uuid))) {
+            return Flow::Continue;
+        }
+        if fresh_click(player.uuid) {
+            show_portable(host, &player, id);
+        }
+        Flow::Cancel
+    }
+
     fn right_click_block(&self, host: &mut dyn Host, event: &mut RightClickBlockEvent) -> Flow {
         if !is_gap(&host.block(event.pos)) {
             return Flow::Continue;
@@ -815,6 +889,11 @@ mod tests {
         // The bigger Giga Gap's lower tip sits on the block too.
         let alt = gap_size(GIGA);
         assert!((gap_lift(alt) + alt * GAP_TIP - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn yukaris_tag_is_the_one_alice_dolls_gives_her() {
+        assert_eq!(owner_tag(0xab), "alice_dolls.owner.000000000000000000000000000000ab");
     }
 
     #[test]

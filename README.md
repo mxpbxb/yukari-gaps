@@ -39,6 +39,9 @@ Install both from the launcher's Mods page, then press Build:
 - **Right-click** any gap for every other gap you may use (found, global, or shared with you): tiles in rows, a new row when one is full,
   and a scroll bar when there are more than fit. Hover over one for where it is; click it to go.
 - **Travel is free**, however far, and to any dimension.
+- **A Yukari Doll** ([Alice Dolls Restringed](https://github.com/mxpbxb/alice-dolls-restringed)) is
+  her owner's portable gap: right-click her with an empty hand for the same screen, and she follows
+  you through. It only goes one way: she is never on the list.
 - **Sneak and right-click** your own gap to rename it, change its lock or who it is shared with.
 - In the world the gap is pipef0x's Yukari Gap Demo look: an S-shaped gap that slowly breathes, full of
   drifting purple fog and wandering eyes, with a red bow swinging at each tip. It always turns to face you.
