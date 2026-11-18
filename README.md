@@ -43,8 +43,8 @@ Install both from the launcher's Mods page, then press Build:
   drifting purple fog and wandering eyes, with a red bow swinging at each tip. It always turns to face you.
   You can walk into it. Click or break it up at the picture, in the block above the one you placed
   it on.
-- **Yukari Gap (Alt)** is the same gap with another look: a dark back wall and red-eyed eyes drifting
-  across it. It can't be crafted: it is in the creative tab. Put an alt gap in the grid alone to
+- **Yukari Gap (Alt)** is the same gap with another look, a quarter bigger: a dark back wall and
+  red-eyed eyes drifting across it. It can't be crafted: it is in the creative tab. Put an alt gap in the grid alone to
   turn it into a Yukari Gap. Both kinds travel to each other.
 
 The world keeps its gaps in `<world>/yukari_gap/gaps.tsv`.

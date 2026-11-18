@@ -62,11 +62,22 @@ const GAP_SIZE: f32 = 2.25;
 /// Where the gap's tips are in the picture, from its top left and from its bottom right corner,
 /// as a share of its side: the demo's Bezier ends, (0.125, 0.125) and (0.875, 0.875).
 const GAP_TIP: f32 = 0.125;
-/// How far above the block the picture's bottom edge is: low enough that the gap's lower tip
-/// sits on the top of the block, where the second block starts.
-const GAP_LIFT: f32 = 1.0 - GAP_SIZE * GAP_TIP;
-/// How big a bow is, in blocks: the demo's 0.45 of its 2 block gap.
-const BOW_SIZE: f32 = GAP_SIZE * 0.225;
+/// How big a bow is, as a share of its gap: the demo's 0.45 of its 2 block gap.
+const BOW_SHARE: f32 = 0.225;
+/// How much bigger the alt gap is drawn than the gap, bows and all.
+const ALT_SCALE: f32 = 1.25;
+
+/// How big a gap block's picture is, in blocks.
+fn gap_size(block: &str) -> f32 {
+    if block == GAP_ALT { GAP_SIZE * ALT_SCALE } else { GAP_SIZE }
+}
+
+/// How far above the block a picture `size` blocks big has its bottom edge: low enough that the
+/// gap's lower tip sits on the top of the block, where the second block starts.
+fn gap_lift(size: f32) -> f32 {
+    1.0 - size * GAP_TIP
+}
+
 /// How far a bow swings each way, in degrees (the demo's 2π/16), and how long a swing there and
 /// back takes, in ticks (the demo's 4 seconds).
 const BOW_SWING: f32 = 22.5;
@@ -688,14 +699,16 @@ impl Hooks for Mod {
         let dx = camera.position[0] - (f64::from(event.pos[0]) + 0.5);
         let dz = camera.position[2] - (f64::from(event.pos[2]) + 0.5);
         let sprite = gap_sprite(event.block);
+        let size = gap_size(event.block);
+        let lift = gap_lift(size);
         let draw = &mut *event.draw;
         let swing = bow_swing(draw.game_time as f64 + f64::from(draw.partial));
         let light = draw.light;
         draw.light = FULL_BRIGHT;
         draw.push();
         draw.rotate_about([0.0, 1.0, 0.0], facing_yaw(dx, dz), [0.5, 0.0, 0.5]);
-        let (left, right) = (0.5 - GAP_SIZE / 2.0, 0.5 + GAP_SIZE / 2.0);
-        let (bottom, top) = (GAP_LIFT, GAP_LIFT + GAP_SIZE);
+        let (left, right) = (0.5 - size / 2.0, 0.5 + size / 2.0);
+        let (bottom, top) = (lift, lift + size);
         // The front, towards the camera; and the back, a hair behind it and the right way round
         // from there, should the turn ever leave the camera behind it.
         let z = 0.5;
@@ -706,9 +719,10 @@ impl Hooks for Mod {
         host.draw_quad(draw, sprite, back, [16.0, 0.0, 0.0, 16.0], 0xFF_FF_FF);
         // The bows, a little in front of the gap: the top one swings one way as the bottom one
         // swings the other.
-        let inset = GAP_SIZE * GAP_TIP;
-        draw_bow(host, draw, [left + inset, top - inset], swing);
-        draw_bow(host, draw, [right - inset, bottom + inset], -swing);
+        let inset = size * GAP_TIP;
+        let bow = size * BOW_SHARE;
+        draw_bow(host, draw, [left + inset, top - inset], bow, swing);
+        draw_bow(host, draw, [right - inset, bottom + inset], bow, -swing);
         draw.pop();
         draw.light = light;
     }
@@ -720,8 +734,9 @@ impl Hooks for Mod {
         }
         // Its corners, turned any way about the middle, stay within half the diagonal of it; and
         // the bows, centred on the tips, reach half a bow past those.
-        let reach = GAP_SIZE * std::f32::consts::FRAC_1_SQRT_2 + BOW_SIZE * 0.5;
-        let middle = GAP_LIFT + GAP_SIZE / 2.0;
+        let size = gap_size(event.block);
+        let reach = size * std::f32::consts::FRAC_1_SQRT_2 + size * BOW_SHARE * 0.5;
+        let middle = gap_lift(size) + size / 2.0;
         *event.bounds = [0.5 - reach, middle - reach, 0.5 - reach, 0.5 + reach, middle + reach, 0.5 + reach];
     }
 }
@@ -735,10 +750,10 @@ fn bow_swing(ticks: f64) -> f32 {
     (-1.0 + 2.0 * eased) as f32 * BOW_SWING
 }
 
-/// A bow centred at `at` (x, y) on the gap's plane, a hair in front of it and turned `degrees`
-/// about its middle; its back too, a hair behind the gap's back.
-fn draw_bow(host: &dyn Host, draw: &mut horizon_client::mod_api::BlockEntityDraw, at: [f32; 2], degrees: f32) {
-    let h = BOW_SIZE / 2.0;
+/// A bow `size` blocks across centred at `at` (x, y) on the gap's plane, a hair in front of it and
+/// turned `degrees` about its middle; its back too, a hair behind the gap's back.
+fn draw_bow(host: &dyn Host, draw: &mut horizon_client::mod_api::BlockEntityDraw, at: [f32; 2], size: f32, degrees: f32) {
+    let h = size / 2.0;
     let [x, y] = at;
     draw.push();
     draw.rotate_about([0.0, 0.0, 1.0], degrees, [x, y, 0.5]);
@@ -774,7 +789,16 @@ mod tests {
 
     #[test]
     fn the_lower_tip_sits_on_the_block() {
-        assert!((GAP_LIFT + GAP_SIZE * GAP_TIP - 1.0).abs() < 1e-6);
+        assert!((gap_lift(GAP_SIZE) + GAP_SIZE * GAP_TIP - 1.0).abs() < 1e-6);
+        // The bigger alt gap's lower tip sits on the block too.
+        let alt = gap_size(GAP_ALT);
+        assert!((gap_lift(alt) + alt * GAP_TIP - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_alt_gap_is_a_quarter_bigger() {
+        assert_eq!(gap_size(GAP), GAP_SIZE);
+        assert!((gap_size(GAP_ALT) - GAP_SIZE * 1.25).abs() < 1e-6);
     }
 
     fn gap(name: &str, x: i32) -> Gap {
