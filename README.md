@@ -69,7 +69,8 @@ by the Horizon launcher (`native-build`).
 - The gap's look (its shader, baked into `textures/entity/gap.png`) and the bow (`textures/entity/bow.png`)
   are from [Yukari Gap Demo](https://github.com/pipef0x/Yukari-Gap-Demo) by pipef0x, MIT licensed.
   The alt gap (`textures/entity/gap_alt.png`) keeps its shape and eye motion, with mxpbxb's back wall
-  and eye (`art/gap_alt_back.png`, `art/gap_alt_eye.png`; the eye is also the alt gap's item).
+  and eye (`art/gap_alt_back.png`, `art/gap_alt_eye.png`); its item is the first alt eye
+  (`art/gap_alt_item.png`).
 - The gap item's animated icon (`textures/item/yukari_gap.png`, `art/shard.png`) is Touhou Little Maid's wireless IO art
   by TartaricAcid and others, by way of Alice Dolls Restringed, under
   [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).

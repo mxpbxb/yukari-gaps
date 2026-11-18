@@ -18,8 +18,9 @@ import zlib
 import bake_gap as g
 
 RES = g.RES
-# How wide each eye is, as a share of the picture: a little over the shader's eyes.
-EYE_WIDTH = 2 * g.HALF_W * 1.15
+# How wide each eye is, as a share of the picture: a little under the shader's eyes (15% smaller
+# than the first alt eye, which was 1.15 times theirs).
+EYE_WIDTH = 2 * g.HALF_W * 1.15 * 0.85
 
 
 def read_png(path):
