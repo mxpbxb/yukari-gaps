@@ -60,6 +60,8 @@ picture, each eye drawn as the eye picture. The back may be animated: draw its f
 square frames stacked top to bottom (64x64 each, so 64 wide and 64 x N tall), and bake again. The
 gap shows the next back frame four times a second, so 8 frames make a 2-second pulse; for a clean
 loop make N divide 192.
+`shaders/gap.wgsl` is the demo's gap shader (`fog.vsh` and `fog.fsh`) translated from GLSL to WGSL,
+for drawing the gap live instead of from baked frames once Horizon lets mods bring shaders.
 `cargo horizon-mod build` in `content/` makes the `.hmod`; the native mod's source is `native/`, built
 by the Horizon launcher (`native-build`).
 
@@ -67,7 +69,8 @@ by the Horizon launcher (`native-build`).
 
 - Code and art by mxpbxb. MIT licensed: see `LICENSE`.
 - The gap's look (its shader, baked into `textures/entity/gap.png`) and the bow (`textures/entity/bow.png`)
-  are from [Yukari Gap Demo](https://github.com/pipef0x/Yukari-Gap-Demo) by pipef0x, MIT licensed.
+  are from [Yukari Gap Demo](https://github.com/pipef0x/Yukari-Gap-Demo) by pipef0x, MIT licensed,
+  as is `shaders/gap.wgsl`, its shader in WGSL.
   The Giga Gap (`textures/entity/giga_gap.png`) keeps its shape and eye motion, with mxpbxb's back
   wall and eye (`art/gap_alt_back.png`, `art/gap_alt_eye.png`).
 - The gap item's animated icon (`textures/item/yukari_gap.png`, `art/shard.png`) is Touhou Little Maid's wireless IO art
