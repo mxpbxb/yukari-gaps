@@ -1,4 +1,13 @@
-// Yukari Gap shader in WGSL: pipef0x's Yukari Gap Demo `fog.vsh` and `fog.fsh` (GLSL 450),
+//! The gap's shader, embedded: pipef0x's Yukari Gap Demo `fog.vsh` and `fog.fsh` (GLSL 450),
+//! translated line for line into WGSL. MIT licensed, Copyright (c) 2026 pipef0x:
+//! <https://github.com/pipef0x/Yukari-Gap-Demo>.
+//!
+//! Kept here, as Rust source, so the native mod carries it: for drawing the gap live instead of
+//! from baked frames once Horizon lets mods bring shaders.
+
+/// The gap shader's WGSL source: a vertex and a fragment entry point, its uniforms at bindings
+/// 0 to 2 of group 0.
+pub const GAP_WGSL: &str = r#"// Yukari Gap shader in WGSL: pipef0x's Yukari Gap Demo `fog.vsh` and `fog.fsh` (GLSL 450),
 // translated line for line. MIT licensed, Copyright (c) 2026 pipef0x:
 // https://github.com/pipef0x/Yukari-Gap-Demo
 //
@@ -465,4 +474,19 @@ fn fs_main(@location(0) tex_coord0: vec2<f32>) -> @location(0) vec4<f32> {
 
     // No eye here: the simplex fog.
     return fog(uv);
+}
+"#;
+
+#[cfg(test)]
+mod tests {
+    use super::GAP_WGSL;
+
+    #[test]
+    fn gap_shader_has_its_entry_points_and_bindings() {
+        assert!(GAP_WGSL.contains("@vertex"));
+        assert!(GAP_WGSL.contains("@fragment"));
+        for binding in 0..3 {
+            assert!(GAP_WGSL.contains(&format!("@group(0) @binding({binding})")));
+        }
+    }
 }

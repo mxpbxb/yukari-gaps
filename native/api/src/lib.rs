@@ -9,6 +9,7 @@
 
 mod store;
 mod ui;
+pub mod shader;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
